@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #faf8f4; --surface: #ffffff; --surface2: #f4f1ea; --line: #e4dfd3; --line-strong: #cfc8b8;
+  --ink: #1c1b19; --muted: #66625a; --faint: #8d887d;
+  --primary: #27367d; --primary-hover: #1f2c66; --on-primary: #ffffff; --primary-soft: #e9edf9;
+  --ok: #1a6e43; --ok-bg: #e5f2eb; --warn: #8a5304; --warn-bg: #fbf0da; --bad: #a8241a; --bad-bg: #fbe8e5; --info: #27367d; --info-bg: #e9edf9;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131417; --surface: #1b1c20; --surface2: #23242a; --line: #2c2d34; --line-strong: #3b3d47;
+    --ink: #ecebe6; --muted: #a3a097; --faint: #7b7870;
+    --primary: #8da0f2; --primary-hover: #a5b4f6; --on-primary: #10132b; --primary-soft: #232842;
+    --ok: #6fd1a0; --ok-bg: #16281f; --warn: #e6b45c; --warn-bg: #2d2412; --bad: #f08a80; --bad-bg: #2f1a18; --info: #9fb0f5; --info-bg: #212642;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131417; --surface: #1b1c20; --surface2: #23242a; --line: #2c2d34; --line-strong: #3b3d47;
+  --ink: #ecebe6; --muted: #a3a097; --faint: #7b7870;
+  --primary: #8da0f2; --primary-hover: #a5b4f6; --on-primary: #10132b; --primary-soft: #232842;
+  --ok: #6fd1a0; --ok-bg: #16281f; --warn: #e6b45c; --warn-bg: #2d2412; --bad: #f08a80; --bad-bg: #2f1a18; --info: #9fb0f5; --info-bg: #212642;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface2: var(--surface2);
+  --color-line: var(--line); --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink); --color-muted: var(--muted); --color-faint: var(--faint);
+  --color-primary: var(--primary); --color-primary-hover: var(--primary-hover); --color-on-primary: var(--on-primary); --color-primary-soft: var(--primary-soft);
+  --color-ok: var(--ok); --color-ok-bg: var(--ok-bg); --color-warn: var(--warn); --color-warn-bg: var(--warn-bg);
+  --color-bad: var(--bad); --color-bad-bg: var(--bad-bg); --color-info: var(--info); --color-info-bg: var(--info-bg);
+  --font-sans: Inter, "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+::selection { background: var(--primary-soft); }
+button, [role="tab"], select, summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+textarea, input, select { font: inherit; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.anim-fade-up { animation: fade-up 180ms ease-out both; }
+.anim-fade { animation: fade 140ms ease-out both; }
+.anim-slide { animation: slide-in 200ms ease-out both; }
+.spin { animation: spin 800ms linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+/* The A4 print preview never animates */
+.a4-sheet, .a4-sheet * { animation: none !important; transition: none !important; }
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
