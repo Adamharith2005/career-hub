@@ -153,16 +153,18 @@ export const Progress = ({ value, label }: { value: number; label: string }) => 
 )
 
 // ---------------------------------------------------------------- Toasts
-type ToastItem = { id: number; tone: Tone; text: string }
-const ToastCtx = createContext<(tone: Tone, text: string) => void>(() => {})
+export type ToastAction = { label: string; onClick: () => void }
+type ToastItem = { id: number; tone: Tone; text: string; action?: ToastAction }
+const ToastCtx = createContext<(tone: Tone, text: string, action?: ToastAction) => void>(() => {})
 export const useToast = () => useContext(ToastCtx)
 export function ToastHost({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
-  const push = useCallback((tone: Tone, text: string) => {
+  const push = useCallback((tone: Tone, text: string, action?: ToastAction) => {
     const id = Date.now() + Math.random()
-    setItems((x) => [...x.slice(-3), { id, tone, text }])
-    setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), tone === 'bad' ? 7000 : 3800)
+    setItems((x) => [...x.slice(-3), { id, tone, text, action }])
+    setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), action ? 8000 : tone === 'bad' ? 7000 : 3800)
   }, [])
+  const dismiss = (id: number) => setItems((x) => x.filter((i) => i.id !== id))
   return (
     <ToastCtx.Provider value={push}>
       {children}
@@ -171,6 +173,7 @@ export function ToastHost({ children }: { children: React.ReactNode }) {
           <div key={t.id} role={t.tone === 'bad' ? 'alert' : 'status'} className="anim-slide pointer-events-auto flex items-start gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm shadow-[0_4px_16px_rgba(0,0,0,.12)]">
             {t.tone === 'bad' ? <XCircle size={17} className="mt-0.5 shrink-0 text-bad" aria-hidden /> : t.tone === 'warn' ? <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warn" aria-hidden /> : <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-ok" aria-hidden />}
             <span className="min-w-0 flex-1 break-words">{t.text}</span>
+            {t.action && <button onClick={() => { t.action!.onClick(); dismiss(t.id) }} className="shrink-0 rounded-md px-2 py-0.5 text-sm font-semibold text-primary hover:bg-primary-soft">{t.action.label}</button>}
           </div>
         ))}
       </div>

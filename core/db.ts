@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
 
 export type DB = DatabaseSync
 
@@ -148,6 +149,23 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_events_app ON application_events(application_id);
   `,
+  `
+  -- V2: structured profile-first model. Additive only: no existing column or row is changed or dropped.
+  ALTER TABLE facts ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}';   -- per-category fields (project type, role, url, level, cgpa, scale, proficiency...)
+  ALTER TABLE facts ADD COLUMN updated_at TEXT;
+  ALTER TABLE facts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+  UPDATE facts SET updated_at = created_at WHERE updated_at IS NULL;
+  ALTER TABLE source_documents ADD COLUMN fact_id TEXT;                    -- optional evidence attached to one record
+  ALTER TABLE source_documents ADD COLUMN evidence_label TEXT;
+  CREATE TABLE shortlist (
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, company_id)
+  );
+  -- Setup wizard changed from 3 to 4 steps; unfinished wizards restart at step 1 (their data is kept).
+  UPDATE profiles SET onboarding_step = 1 WHERE onboarding_done = 0;
+  `,
 ]
 
 export function migrate(db: DB) {
@@ -167,9 +185,20 @@ export function migrate(db: DB) {
   }
 }
 
+/** Copy the database aside before any pending migration touches an existing (non-empty) file. Returns the backup path, if one was made. */
+export function backupBeforeMigrate(db: DB, file: string): string | null {
+  const v = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+  if (v === 0 || v >= MIGRATIONS.length || !fs.existsSync(file)) return null
+  try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)') } catch { /* best effort */ }
+  const dest = `${file}.pre-v${v}-to-v${MIGRATIONS.length}.bak`
+  if (!fs.existsSync(dest)) fs.copyFileSync(file, dest)
+  return dest
+}
+
 export function openDb(file: string): DB {
   const db = new DatabaseSync(file)
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;')
+  backupBeforeMigrate(db, file)
   migrate(db)
   return db
 }

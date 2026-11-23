@@ -4,6 +4,7 @@ import { DB, all, get, run, id, nowIso } from './db.ts'
 import { findTech } from './domain.ts'
 import { sha256 } from './storage.ts'
 import { addFact, listFacts, type FactInput, type Identity } from './profiles.ts'
+import { cleanSkillItems, isPlausibleGroupLabel, isRealSkillGroup, looksLikeHeading, stripBulletGlyph } from './integrity.ts'
 
 // ------------------------------------------------------------------ text extraction
 export interface Extracted { text: string; pages: number; links: string[]; scannedLikely: boolean; pageTexts?: string[] }
@@ -54,19 +55,20 @@ export async function extractFile(file: string): Promise<Extracted> {
 }
 
 // ------------------------------------------------------------------ parsing
-type Sec = 'HEAD' | 'SUMMARY' | 'EDUCATION' | 'SKILL' | 'PROJECT' | 'EXPERIENCE' | 'LEADERSHIP' | 'CERTIFICATION' | 'AWARD' | 'LANGUAGE'
+type Sec = 'HEAD' | 'UNKNOWN' | 'SUMMARY' | 'EDUCATION' | 'SKILL' | 'PROJECT' | 'EXPERIENCE' | 'LEADERSHIP' | 'CERTIFICATION' | 'AWARD' | 'LANGUAGE'
 const HEADINGS: [RegExp, Sec][] = [
   [/^(education|academic background|academic qualifications?|qualifications?|pendidikan)$/i, 'EDUCATION'],
   [/^(technical skills?|skills?|skills? (&|and) tools|technical proficiency|core competenc(y|ies)|technologies|tech stack|kemahiran)$/i, 'SKILL'],
   [/^(projects?|personal projects?|academic projects?|selected projects?|key projects?|final year projects?|technical projects?|projek)$/i, 'PROJECT'],
   [/^((work|professional|relevant|industrial)? ?experience|employment( history)?|internships?|work history|pengalaman)$/i, 'EXPERIENCE'],
-  [/^(leadership|activities|extracurricular(s| activities)?|volunteer(ing)?( experience)?|co-?curricular( activities)?|involvement|leadership (&|and) activities)$/i, 'LEADERSHIP'],
+  [/^(leadership|activities|extracurricular(s| activities)?|volunteer(ing)?( experience)?|co-?curricular( activities)?|involvement|(leadership|activities) (&|and) (involvement|activities|leadership)|clubs?( (&|and) societies)?|community( service| involvement)?)$/i, 'LEADERSHIP'],
   [/^(certifications?|licenses?( (&|and) certifications?)?|courses|training|professional development)$/i, 'CERTIFICATION'],
   [/^(awards?( (&|and) (honou?rs|achievements?))?|honou?rs|achievements?|scholarships?)$/i, 'AWARD'],
   [/^(languages?|bahasa)$/i, 'LANGUAGE'],
   [/^(summary|profile|objective|about me|professional summary|career objective)$/i, 'SUMMARY'],
 ]
-const BULLET = /^\s*[•\-–—·*▪●◦■►]\s*/
+// Includes private-use / replacement glyphs that PDF text extraction emits for Symbol/Wingdings bullets (otherwise they surface as "?").
+const BULLET = /^[\s ]*(?:[•\-–—·*▪●◦■►▶✓✔→]|[-�])[\s ]*/u
 const MONTH = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
 const DATE = `(?:${MONTH}\\.?\\s+\\d{4}|\\d{1,2}/\\d{4}|\\d{4})`
 const RANGE = new RegExp(`(${DATE})\\s*(?:-|–|—|to)\\s*(${DATE}|present|current|now|ongoing)`, 'i')
@@ -104,12 +106,17 @@ export function parseCvText(text: string, docId: string, links: string[] = []): 
   if (loc) identity.location = loc.replace(EMAIL, '').replace(PHONE, '').replace(/(?:\s*[|•·]\s*){2,}/g, ' | ').replace(/^[\s|•·,]+|[\s|•·,]+$/g, '').trim().slice(0, 80)
 
   // split into sections
+  const unknownHeadings: string[] = []
   const secs: { sec: Sec; start: number; lines: { n: number; t: string }[] }[] = [{ sec: 'HEAD', start: 0, lines: [] }]
   lines.forEach((t, n) => {
     const h = headingOf(t)
     if (h) secs.push({ sec: h, start: n, lines: [] })
-    else secs[secs.length - 1].lines.push({ n: n + 1, t })
+    else if (n > 0 && looksLikeHeading(t.trim()) && !BULLET.test(t)) {
+      // An ALL-CAPS line we don't recognise (e.g. "REFERENCES") ends the current section instead of being swallowed by it.
+      secs.push({ sec: 'UNKNOWN', start: n, lines: [] }); unknownHeadings.push(t.trim())
+    } else secs[secs.length - 1].lines.push({ n: n + 1, t })
   })
+  if (unknownHeadings.length) warnings.push(`Skipped unrecognised section${unknownHeadings.length > 1 ? 's' : ''}: ${unknownHeadings.join(', ')}. Add anything from there by hand if you want it in your profile.`)
   if (secs.length === 1) warnings.push('No section headings (Education, Skills, Projects…) were recognised. Please add your details manually.')
 
   const facts: FactInput[] = []
@@ -144,14 +151,20 @@ export function parseCvText(text: string, docId: string, links: string[] = []): 
         break
       }
       case 'SKILL': {
+        const dropped: string[] = []
         for (const l of body) {
-          const t = l.t.replace(BULLET, '').trim()
+          const t = stripBulletGlyph(l.t)
           if (!t) continue
           const m = t.match(/^([^:]{2,40}):\s*(.+)$/)
-          const items = (m ? m[2] : t).split(/[,;•|·]/).map((x) => x.trim()).filter((x) => x && x.length < 40)
-          if (!items.length) continue
-          facts.push({ category: 'SKILL', title: m ? m[1].trim() : 'Skills', claim_text: items.join(', '), tools: items, source_citation: cite(l.n, l.n), confidence: 'medium' })
+          const label = m && isPlausibleGroupLabel(m[1]) ? m[1].trim() : null
+          const raw = (label ? m![2] : t).split(/[,;•|·]/).map((x) => x.trim()).filter(Boolean)
+          const { kept, rejected } = cleanSkillItems(raw)
+          dropped.push(...rejected.map((r) => r.item))
+          if (!kept.length) continue
+          if (label && !isRealSkillGroup(label, kept)) { dropped.push(t); continue }   // e.g. "Procurement: Sourcing Lead" is not a technical skill group
+          facts.push({ category: 'SKILL', title: label ?? 'Skills', claim_text: kept.join(', '), tools: kept, source_citation: cite(l.n, l.n), confidence: 'medium' })
         }
+        if (dropped.length) warnings.push(`Ignored ${dropped.length} line${dropped.length > 1 ? 's' : ''} in your skills section that did not look like skills (e.g. "${dropped[0]}").`)
         break
       }
       case 'PROJECT': case 'EXPERIENCE': case 'LEADERSHIP': {

@@ -30,7 +30,7 @@ export interface Assessment {
 }
 const DISCLAIMER = 'Explainable heuristic computed locally from your confirmed facts. It is NOT an ATS score and not a prediction of employer decisions.'
 
-const ADJ: Record<string, string[]> = {
+export const ADJACENT_ROLES: Record<string, string[]> = {
   swe: ['frontend', 'backend', 'cloud_devops', 'qa'], frontend: ['swe'], backend: ['swe', 'cloud_devops', 'data'], ai_ml: ['data', 'swe'], data: ['ai_ml', 'backend'],
   cyber: ['cloud_devops', 'it_support'], cloud_devops: ['it_support', 'backend', 'cyber', 'swe'], qa: ['swe'], it_support: ['cloud_devops', 'cyber'], other: [],
 }
@@ -84,7 +84,7 @@ export function assess(input: {
   // --- role alignment
   const roles = profile.roles as string[]
   const sRole = roles.includes(spec.roleFamily) ? (profile.primary_role === spec.roleFamily ? 1 : 0.85)
-    : roles.some((r) => (ADJ[r] ?? []).includes(spec.roleFamily)) ? 0.5 : spec.roleFamily === 'other' ? 0.4 : 0.2
+    : roles.some((r) => (ADJACENT_ROLES[r] ?? []).includes(spec.roleFamily)) ? 0.5 : spec.roleFamily === 'other' ? 0.4 : 0.2
   if (sRole <= 0.2) risks.push(`This looks like a ${roleLabel(spec.roleFamily)} role, outside the roles you selected.`)
 
   // --- location / compensation

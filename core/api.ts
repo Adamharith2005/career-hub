@@ -7,13 +7,16 @@ import * as A from './applications.ts'
 import { importCv, listSourceDocs } from './cv.ts'
 import { parseJobText, compensationFor, type JobSpec } from './job.ts'
 import { assess } from './fit.ts'
+import { targetFit, companyContext } from './target.ts'
+import { validateFact, auditFacts } from './integrity.ts'
+import { profileCompletion } from './completion.ts'
 import { buildResume, buildLetter, factCheckResume, factCheckLetter, diffVsMaster, type ResumeAST, type LetterAST, type ChangeLogEntry } from './resume.ts'
 import { renderResumePdf, renderLetterPdf, renderResumeDocx, renderLetterDocx, qaExport, type QaReport } from './render.ts'
 import { buildEmail, buildEml, lintEmail, setAttachmentLine, EMAIL_KIND_LABEL, type EmailKind } from './email.ts'
 import { aiAnalyzeJob, aiWriteLetter, aiWriteEmailBody, AiError, describeProvider, DEFAULT_MODELS, type AiConfig } from './ai.ts'
 import { fetchJobPage, FetchBlocked } from './fetchjob.ts'
 import { applicationDir, checkFile, ensureDir, profileDir, sha256, sha256File, writeFileAtomic, writeNewFile, assertInside } from './storage.ts'
-import { ROLE_FAMILIES, roleLabel, slugify, safeParse, STATUS_LABEL, APP_STATUSES, type AppStatus } from './domain.ts'
+import { ROLE_FAMILIES, TECH_NAMES, roleLabel, slugify, safeParse, STATUS_LABEL, APP_STATUSES, type AppStatus } from './domain.ts'
 
 export interface Env {
   db: DB
@@ -22,7 +25,7 @@ export interface Env {
   secrets: { get(profileId: string): string | null; set(profileId: string, value: string | null): void; available(): boolean }
   ui: {
     pickFolder(): Promise<string | null>
-    pickFile(kind: 'cv' | 'company'): Promise<string | null>
+    pickFile(kind: 'cv' | 'company' | 'evidence'): Promise<string | null>
     openPath(p: string): Promise<string>
     showItem(p: string): void
     openExternal(u: string): void
@@ -66,6 +69,17 @@ export function createApi(env: Env) {
   }
 
   const companyCtx = (pid: string, companyId?: string | null) => companyId ? C.getCompany(db, pid, companyId) : null
+
+  /** One place that decides what company/role context shapes a document. Context only changes ORDER and FRAMING of confirmed facts; it never adds any. */
+  function tailoring(app: any) {
+    const spec0: JobSpec = app.spec ?? parseJobText(app.job_text, { company: app.company_name, title: app.role_title })
+    const co = companyCtx(app.profile_id, app.company_id)
+    const speculative = app.mode === 'SPECULATIVE_OUTREACH'
+    const ctx = co ? companyContext(co as any, app.role_family) : null
+    const focus = (ctx?.focus ?? app.role_family ?? spec0.roleFamily) as any
+    const spec: JobSpec = speculative ? { ...spec0, roleFamily: focus, preferred: [...new Set([...spec0.preferred, ...(ctx?.wantedTech ?? [])])] } : spec0
+    return { spec, co, speculative, focusLabel: speculative ? roleLabel(focus) : undefined, industry: speculative ? (co?.industry ?? null) : null, roleFamily: focus as string }
+  }
 
   function computeAssessment(p: ReturnType<typeof profile>, spec: JobSpec, jobText: string, company: any, careerType: 'INTERNSHIP' | 'GRADUATE') {
     return assess({ profile: p, facts: P.listFacts(db, p.profile_id), spec, jobText, company, careerType, now: now() })
@@ -136,7 +150,7 @@ export function createApi(env: Env) {
     'boot': async () => {
       const profiles = P.listProfiles(db).map((x) => ({ profile_id: x.profile_id, name: x.name, onboarding_done: !!x.onboarding_done }))
       const aid = P.getActiveProfileId(db); const active = aid
-      return { profiles, activeProfileId: aid, profile: aid ? P.getProfile(db, aid) : null, roleFamilies: ROLE_FAMILIES, statuses: APP_STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s] })), companyCount: get<any>(db, 'SELECT COUNT(*) n FROM companies WHERE profile_id IS NULL')!.n, secureKeyStorage: env.secrets.available(), defaultFolder: path.join(env.ui.documentsPath(), 'Career Hub'), dataDir: env.userDataDir, followupDays: Number(active ? P.getSetting(db, active, 'followup.days', '7') : 7) || 7 }
+      return { techNames: TECH_NAMES, profiles, activeProfileId: aid, profile: aid ? P.getProfile(db, aid) : null, roleFamilies: ROLE_FAMILIES, statuses: APP_STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s] })), companyCount: get<any>(db, 'SELECT COUNT(*) n FROM companies WHERE profile_id IS NULL')!.n, secureKeyStorage: env.secrets.available(), defaultFolder: path.join(env.ui.documentsPath(), 'Career Hub'), dataDir: env.userDataDir, followupDays: Number(active ? P.getSetting(db, active, 'followup.days', '7') : 7) || 7 }
     },
     'settings.set': async (a: { followupDays?: number }) => { if (a.followupDays) P.setSetting(db, activeId(), 'followup.days', String(Math.min(30, Math.max(1, Math.round(a.followupDays))))); return true },
     'profile.create': async (a: { name: string }) => { const p = P.createProfile(db, a.name); P.setActiveProfile(db, p.profile_id); return p },
@@ -180,19 +194,66 @@ export function createApi(env: Env) {
     'facts.list': async () => P.listFacts(db, activeId()),
     'facts.save': async (a: any) => {
       const pid = activeId()
+      if (a.fact_id && !P.listFacts(db, pid).some((f) => f.fact_id === a.fact_id)) throw new ApiError('Fact not found in this profile')   // ownership first
+      a.details = P.cleanDetails(a.details)
+      const derived = P.derivedClaimText(a); if (derived !== null) a.claim_text = derived
+      if (a.category === 'SKILL') a.claim_text = (a.tools ?? []).join(', ')
+      const issues = validateFact({ ...a, tools: a.tools ?? [] })
+      if (issues.length) throw new ApiError(issues[0].message, 'INVALID_ENTRY', issues)   // category integrity: reject garbage at the door
       if (a.fact_id) P.updateFact(db, pid, a.fact_id, { ...a, tools: a.tools ?? [] }); else a.fact_id = P.addFact(db, pid, { ...a, source_citation: 'manual', confidence: 'high', confirmed: a.confirmed ?? true })
       syncMaster(); return a.fact_id as string
     },
+    'facts.audit': async () => auditFacts(P.listFacts(db, activeId())),
+    'facts.reorder': async (a: { ids: string[] }) => { const pid = activeId(); a.ids.forEach((fid, i) => P.updateFact(db, pid, fid, { sort_order: i })); return true },
+    'profile.completion': async () => profileCompletion(profile(), P.listFacts(db, activeId())),
+
+    // ---- optional evidence files (transcripts, certificates, screenshots...) attached to ONE record of THIS profile
+    'evidence.attach': async (a: { factId: string; path?: string }) => {
+      const p = profile(); const fact = P.listFacts(db, p.profile_id).find((f) => f.fact_id === a.factId)
+      if (!fact) throw new ApiError('That entry was not found in your profile.')
+      const src = a.path ?? await env.ui.pickFile('evidence'); if (!src) return null
+      const ext = path.extname(src).toLowerCase()
+      if (!['.pdf', '.png', '.jpg', '.jpeg', '.docx'].includes(ext)) throw new ApiError('Evidence must be a PDF, PNG, JPG or DOCX file.', 'BAD_TYPE')
+      const size = fs.statSync(src).size
+      if (size > 10 * 1024 * 1024) throw new ApiError('That file is larger than 10 MB. Choose a smaller file or a compressed copy.', 'TOO_LARGE')
+      const buf = fs.readFileSync(src); const hash = sha256(buf)
+      const dir = path.join(masterDir(p), '..', 'evidence'); fs.mkdirSync(dir, { recursive: true })
+      const dest = path.join(dir, `${hash.slice(0, 10)}-${slugify(path.parse(src).name, 40)}${ext}`)
+      if (!fs.existsSync(dest)) fs.copyFileSync(src, dest)
+      const doc_id = id('sd')
+      run(db, `INSERT INTO source_documents (doc_id, profile_id, kind, original_name, stored_path, sha256, text_content, created_at, fact_id, evidence_label) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        doc_id, p.profile_id, 'SUPPORT', path.basename(src), dest, hash, '', nowIso(), a.factId, fact.title)
+      return { doc_id, name: path.basename(src), size }
+    },
+    'evidence.list': async () => all(db, 'SELECT doc_id, original_name, fact_id, evidence_label, created_at FROM source_documents WHERE profile_id=? AND fact_id IS NOT NULL ORDER BY created_at', activeId()),
+    'evidence.remove': async (a: { docId: string }) => { run(db, 'DELETE FROM source_documents WHERE doc_id=? AND profile_id=? AND fact_id IS NOT NULL', a.docId, activeId()); return true },
+
     'facts.delete': async (a: { id: string }) => { P.deleteFact(db, activeId(), a.id); syncMaster(); return true },
+    // Confirming is how imported/legacy records become usable in documents, so category-invalid records (e.g. a heading parsed as a skill) are refused, not confirmed.
     'facts.confirm': async (a: { ids?: string[] }) => {
       const pid = activeId()
-      if (a.ids) for (const i of a.ids) P.updateFact(db, pid, i, { confirmed: true }); else P.confirmAllFacts(db, pid)
-      syncMaster(); return true
+      const all_ = P.listFacts(db, pid)
+      const targets = a.ids ? all_.filter((f) => a.ids!.includes(f.fact_id)) : all_.filter((f) => !f.confirmed)
+      const skipped: { id: string; title: string; message: string }[] = []
+      for (const f of targets) {
+        const issue = validateFact(f)[0]
+        if (issue) { skipped.push({ id: f.fact_id, title: f.title, message: issue.message }); continue }
+        P.updateFact(db, pid, f.fact_id, { confirmed: true })
+      }
+      syncMaster(); return { confirmed: targets.length - skipped.length, skipped }
     },
 
     // ---- companies
-    'companies.list': async (a: C.CompanyFilter) => C.listCompanies(db, activeId(), a ?? {}),
-    'companies.get': async (a: { id: string }) => C.getCompany(db, activeId(), a.id),
+    // Companies carry a per-profile target fit, recomputed on every call: switching profile or role focus can never show stale scores.
+    'companies.list': async (a: C.CompanyFilter & { focusRoles?: string[] }) => {
+      const p = profile(); const facts = P.listFacts(db, p.profile_id)
+      return C.listCompanies(db, p.profile_id, a ?? {}).map((c) => ({ ...c, fit: targetFit({ profile: p, facts, company: c as any, focusRoles: a?.focusRoles, now: now() }) }))
+    },
+    'companies.get': async (a: { id: string; focusRoles?: string[] }) => {
+      const p = profile(); const c = C.getCompany(db, p.profile_id, a.id); if (!c) return null
+      return { ...c, fit: targetFit({ profile: p, facts: P.listFacts(db, p.profile_id), company: c as any, focusRoles: a.focusRoles, now: now() }) }
+    },
+    'companies.shortlist': async (a: { id: string; on: boolean }) => { C.setShortlist(db, activeId(), a.id, a.on); return true },
     'companies.add': async (a: any) => C.addUserCompany(db, activeId(), a),
     'companies.note': async (a: { id: string; note: string }) => { C.setCompanyNote(db, activeId(), a.id, a.note); return true },
     'companies.importPick': async () => { const f = await env.ui.pickFile('company'); return f ? C.importCompanyFile(db, f) : null },
@@ -289,11 +350,10 @@ export function createApi(env: Env) {
       const facts = P.listFacts(db, p.profile_id, true)
       if (!facts.length) throw new ApiError('Confirm at least a few facts in My Profile first — documents are built only from confirmed facts.', 'NO_FACTS')
       root(p)
-      const spec: JobSpec = app.spec ?? parseJobText(app.job_text, { company: app.company_name, title: app.role_title })
+      const t = tailoring(app); const spec = t.spec; const co = t.co
       const lang = a.language ?? p.prefs.language ?? 'en'
-      const rAst = buildResume(p, facts, { ...spec, title: app.role_title, company: app.company_name }, { language: lang, careerType: app.career_type })
-      const co = companyCtx(p.profile_id, app.company_id)
-      const lAst = buildLetter(p, facts, spec, { company: app.company_name, role: app.role_title, careerType: app.career_type, language: lang, now: now(), recipientLines: undefined })
+      const rAst = buildResume(p, facts, { ...spec, title: app.role_title, company: app.company_name }, { language: lang, careerType: app.career_type, focusLabel: t.focusLabel })
+      const lAst = buildLetter(p, facts, spec, { company: app.company_name, role: app.role_title, careerType: app.career_type, language: lang, now: now(), recipientLines: undefined, mode: app.mode, industry: t.industry, focusLabel: t.focusLabel, roleFamily: t.roleFamily })
       if (co?.address && !lAst.recipient.includes(co.address)) lAst.recipient = [lAst.recipient[0], app.company_name]
       let aiNote: { status: string; message?: string; issues?: unknown } = { status: 'not_used' }
       if (a.useAi) {
@@ -343,8 +403,8 @@ export function createApi(env: Env) {
     },
     'docs.regenSection': async (a: { appId: string; sectionId: string; ast: ResumeAST }) => {
       const p = profile(); const app = A.getApp(db, p.profile_id, a.appId); const facts = P.listFacts(db, p.profile_id, true)
-      const spec: JobSpec = app.spec ?? parseJobText(app.job_text, { company: app.company_name, title: app.role_title })
-      const fresh = buildResume(p, facts, { ...spec, title: app.role_title, company: app.company_name }, { language: a.ast.language, careerType: app.career_type })
+      const t = tailoring(app)
+      const fresh = buildResume(p, facts, { ...t.spec, title: app.role_title, company: app.company_name }, { language: a.ast.language, careerType: app.career_type, focusLabel: t.focusLabel })
       const s = fresh.sections.find((x) => x.id === a.sectionId)
       return { ...a.ast, sections: a.ast.sections.map((x) => (x.id === a.sectionId && s ? s : x)) }
     },
@@ -374,11 +434,13 @@ export function createApi(env: Env) {
       src.filter((s) => s.kind !== 'SUPPORT').slice(0, 2).forEach((s, i) => push(`master${i}`, `master CV (${s.original_name})`, s.stored_path, false))
       src.filter((s) => s.kind === 'SUPPORT').forEach((s, i) => push(`support${i}`, s.original_name, s.stored_path, false))
       const labels = cands.filter((c) => c.checked).map((c) => c.label)
+      const tl = tailoring(app)
       const lang = a.language ?? app.spec?.language ?? p.prefs.language ?? 'en'
       const events = A.listEvents(db, p.profile_id, a.appId)
       const appliedOn = app.applied_at ? new Date(app.applied_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null
       const draft = buildEmail(p, facts, { kind: a.kind, language: lang, company: app.company_name, role: app.role_title, roleFamily: app.role_family, careerType: app.career_type, attachmentLabels: labels,
-        appliedOn, hasResponse: events.some((e: any) => e.event_type === 'RESPONSE'), interviewTopic: a.interviewTopic, interviewDate: a.interviewDate, requiredTech: app.spec?.required ?? [] })
+        appliedOn, hasResponse: events.some((e: any) => e.event_type === 'RESPONSE'), interviewTopic: a.interviewTopic, interviewDate: a.interviewDate,
+        requiredTech: [...tl.spec.required, ...(tl.speculative ? tl.spec.preferred : [])], industry: tl.industry })
       const co = companyCtx(p.profile_id, app.company_id)
       const to = a.to ?? app.contact_email ?? ''
       return { draft, to, toSource: to ? (to === app.contact_email && co && usableEmail(co) === to ? 'Seed research record — verify before sending' : 'Entered by you') : 'No verified address on file. Leave blank and use the official careers page, or enter an address you have confirmed.', attachments: cands, language: lang }

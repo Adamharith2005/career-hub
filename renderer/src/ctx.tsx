@@ -2,10 +2,12 @@ import { createContext, useContext } from 'react'
 
 export type Page = 'home' | 'applications' | 'companies' | 'profile' | 'settings'
 export interface NewAppOpts { tab?: 'paste' | 'url' | 'company'; companyId?: string }
+export interface PrepareOpts { companyId: string; focusRoles?: string[] }
 export interface Boot {
   profiles: { profile_id: string; name: string; onboarding_done: boolean }[]
   activeProfileId: string | null
   profile: any | null
+  techNames: string[]
   roleFamilies: { key: string; label: string }[]
   statuses: { key: string; label: string }[]
   companyCount: number
@@ -20,6 +22,7 @@ export interface AppContext {
   go: (p: Page) => void
   openApp: (id: string, tab?: string) => void
   newApp: (o?: NewAppOpts) => void
+  prepare: (o: PrepareOpts) => void
   tick: number            // bumps whenever data may have changed so views reload
 }
 export const Ctx = createContext<AppContext>(null as unknown as AppContext)

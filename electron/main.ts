@@ -45,9 +45,10 @@ function setup() {
         return r.canceled ? null : r.filePaths[0]
       },
       pickFile: async (kind) => {
-        if (E2E) return (kind === 'cv' ? process.env.CAREER_HUB_PICK_CV : process.env.CAREER_HUB_PICK_COMPANY) ?? null
+        if (E2E) return (kind === 'cv' ? process.env.CAREER_HUB_PICK_CV : kind === 'evidence' ? process.env.CAREER_HUB_PICK_EVIDENCE : process.env.CAREER_HUB_PICK_COMPANY) ?? null
         const r = await dialog.showOpenDialog(win!, kind === 'cv'
           ? { title: 'Choose your CV or résumé', properties: ['openFile'], filters: [{ name: 'PDF or Word', extensions: ['pdf', 'docx'] }] }
+          : kind === 'evidence' ? { title: 'Attach a supporting file (max 10 MB)', properties: ['openFile'], filters: [{ name: 'PDF, image or Word', extensions: ['pdf', 'png', 'jpg', 'jpeg', 'docx'] }] }
           : { title: 'Choose the company spreadsheet', properties: ['openFile'], filters: [{ name: 'Spreadsheet', extensions: ['xlsx', 'tsv', 'csv'] }] })
         return r.canceled ? null : r.filePaths[0]
       },

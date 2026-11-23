@@ -1,6 +1,8 @@
 import { findTech, TECH_NAMES, slugify } from './domain.ts'
 import type { JobSpec } from './job.ts'
 import type { Fact, Profile } from './profiles.ts'
+import { cleanLine, cleanSkillItems, isPlausibleGroupLabel, isRealSkillGroup } from './integrity.ts'
+import { factFamilies } from './target.ts'
 
 // ------------------------------------------------------------------ AST
 export interface Bullet { id: string; text: string; original: string; sourceFactIds: string[] }
@@ -13,7 +15,7 @@ export interface ResumeSection {
 }
 export interface ChangeLogEntry { kind: 'included' | 'omitted' | 'ordered' | 'edited'; factId?: string; section: string; reason: string }
 export interface ResumeAST {
-  schema: 1; language: 'en' | 'ms'; target: { company: string; role: string }
+  schema: 1; language: 'en' | 'ms'; target: { company: string; role: string; focus?: string }
   header: { name: string; contacts: { label: string; text: string; url?: string }[] }
   summary?: { text: string; factIds: string[] }
   sections: ResumeSection[]
@@ -23,12 +25,14 @@ export interface LetterAST {
   schema: 1; language: 'en' | 'ms'; target: { company: string; role: string }
   sender: { name: string; lines: string[] }; date: string; recipient: string[]; subject: string; salutation: string
   paragraphs: { id: string; text: string; factIds: string[] }[]; closing: string; signature: string
+  /** Directory text (e.g. the company's industry) quoted in the letter; exempt from the "not in your facts" check because it describes the employer, not the applicant. */
+  contextStrings?: string[]
 }
 
 const D = (s?: string | null) => (s ?? '').trim()
 export const dateRange = (a?: string | null, b?: string | null) => (a && b ? `${a} – ${b}` : a ? `${a} – Present` : b ?? '')
-const splitLines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
-const bulletsOf = (f: Fact) => splitLines(f.claim_text).filter((l) => !/^\(.*\)$/.test(l))
+const splitLines = (s: string) => s.split('\n').map((x) => cleanLine(x)).filter(Boolean)
+const bulletsOf = (f: Fact) => [...splitLines(f.claim_text).filter((l) => !/^\(.*\)$/.test(l)), ...(f.details?.outcome ? [cleanLine(f.details.outcome)] : [])]
 const nid = (() => { let n = 0; return (p: string) => `${p}${++n}` })()
 const shortUrl = (u: string) => u.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '')
 export const tidyText = (s: string) => s.replace(/(?:\s*[|•·]\s*){2,}/g, ' | ').replace(/^[\s|•·,]+|[\s|•·,]+$/g, '').trim()
@@ -58,7 +62,14 @@ function relevance(f: Fact, wanted: Set<string>) {
 }
 const endKey = (f: Fact) => (/present|current|ongoing|now/i.test(f.date_end ?? '') ? 9999 : Number((f.date_end ?? f.date_start ?? '').match(/\d{4}/)?.[0] ?? 0))
 
-export interface BuildOpts { language?: 'en' | 'ms'; careerType?: 'INTERNSHIP' | 'GRADUATE'; maxProjects?: number }
+export interface BuildOpts { language?: 'en' | 'ms'; careerType?: 'INTERNSHIP' | 'GRADUATE'; maxProjects?: number; focusLabel?: string }
+
+/** Relevance of a fact to the target: technology overlap with the wanted set, plus one point when it belongs to the target role family. */
+function targetRelevance(f: Fact, wanted: Set<string>, roleFamily?: string) {
+  const r = relevance(f, wanted)
+  const fam = roleFamily && roleFamily !== 'other' && factFamilies(f).includes(roleFamily) ? 1 : 0
+  return { overlap: r.overlap, count: r.count + fam }
+}
 
 export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSpec, 'required' | 'preferred' | 'roleFamily'> & { title?: string | null; company?: string | null }, opts: BuildOpts = {}): ResumeAST {
   const facts = allFacts.filter((f) => f.confirmed)
@@ -98,8 +109,8 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
   // Skills (JD-relevant values first, nothing added)
   const skillFacts = facts.filter((f) => f.category === 'SKILL' || f.category === 'LANGUAGE')
   if (skillFacts.length) {
-    const groups: SkillGroup[] = skillFacts.map((f) => {
-      const vals = [...f.tools]
+    const groups: SkillGroup[] = skillFacts.filter((f) => f.category === 'LANGUAGE' || (isPlausibleGroupLabel(f.title) && isRealSkillGroup(f.title, f.tools))).map((f) => {
+      const vals = cleanSkillItems(f.tools).kept   // category integrity: no headings, dates or sentences ever reach Skills
       const rel = (v: string) => findTech(v).some((t) => wanted.has(t)) ? 0 : 1
       vals.sort((a, b) => rel(a) - rel(b))   // stable: relevant first, others keep order
       return { label: f.category === 'LANGUAGE' ? 'Spoken languages' : f.title, values: vals, factIds: [f.fact_id] }
@@ -112,12 +123,12 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
   // Projects (ranked by overlap with the job)
   const maxP = opts.maxProjects ?? (career === 'INTERNSHIP' ? 3 : 4)
   const projects = facts.filter((f) => f.category === 'PROJECT')
-    .map((f) => ({ f, ...relevance(f, wanted) })).sort((a, b) => b.count - a.count || endKey(b.f) - endKey(a.f))
+    .map((f) => ({ f, ...targetRelevance(f, wanted, spec.roleFamily) })).sort((a, b) => b.count - a.count || endKey(b.f) - endKey(a.f))
   const chosenP = projects.slice(0, maxP)
   const projSection: ResumeSection | null = chosenP.length ? {
     id: 'projects', title: 'Projects', kind: 'projects',
     items: chosenP.map(({ f, overlap }, i) => {
-      const tools = f.tools.length ? `Technologies: ${f.tools.join(', ')}` : undefined
+      const tools = [f.details?.role ? `Role: ${f.details.role}` : '', f.tools.length ? `Technologies: ${f.tools.join(', ')}` : ''].filter(Boolean).join(' | ') || undefined
       return { id: nid('p'), heading: f.title, subheading: tools, dates: dateRange(f.date_start, f.date_end), factIds: [f.fact_id],
         bullets: bulletsOf(f).slice(0, i === 0 ? 4 : 3).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) }
     }),
@@ -156,14 +167,15 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
     const lang = opts.language === 'ms' ? 'ms' : 'en'
     const clause = eduClause(e0, lang)
     const cap = clause[0].toUpperCase() + clause.slice(1)
+    const focus = opts.focusLabel ? (lang === 'ms' ? ` Berminat dalam ${opts.focusLabel}.` : ` Interested in ${opts.focusLabel}.`) : ''
     const text = lang === 'ms'
-      ? `${cap}. Memohon ${spec.title}.${when ? when.replace('Available from', ' Tersedia dari').replace(' to ', ' hingga ') : ''}`
-      : `${cap}. Applying for ${spec.title}.${when}`
+      ? `${cap}. Memohon ${spec.title}.${focus}${when ? when.replace('Available from', ' Tersedia dari').replace(' to ', ' hingga ') : ''}`
+      : `${cap}. Applying for ${spec.title}.${focus}${when}`
     summary = { text, factIds: [e0.fact_id] }
   }
 
   return {
-    schema: 1, language: opts.language ?? 'en', target: { company: D(spec.company), role: D(spec.title) },
+    schema: 1, language: opts.language ?? 'en', target: { company: D(spec.company), role: D(spec.title), focus: opts.focusLabel },
     header: { name: D(id.fullName) || profile.name, contacts }, summary, sections, changelog: log,
   }
 }
@@ -173,12 +185,12 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export const longDate = (d = new Date()) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 const listJoin = (xs: string[], and = 'and') => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} ${and} ${xs.at(-1)}`
 
-export function buildLetter(profile: Profile, allFacts: Fact[], spec: JobSpec, ctx: { company: string; role: string; careerType: 'INTERNSHIP' | 'GRADUATE'; language?: 'en' | 'ms'; recipientLines?: string[]; now?: Date }): LetterAST {
+export function buildLetter(profile: Profile, allFacts: Fact[], spec: JobSpec, ctx: { company: string; role: string; careerType: 'INTERNSHIP' | 'GRADUATE'; language?: 'en' | 'ms'; recipientLines?: string[]; now?: Date; mode?: 'ADVERTISED_VACANCY' | 'SPECULATIVE_OUTREACH'; industry?: string | null; focusLabel?: string; roleFamily?: string }): LetterAST {
   const facts = allFacts.filter((f) => f.confirmed)
   const ms = ctx.language === 'ms'
   const wanted = new Set([...spec.required, ...spec.preferred])
   const edu = facts.find((f) => f.category === 'EDUCATION')
-  const work = facts.filter((f) => ['PROJECT', 'EXPERIENCE'].includes(f.category)).map((f) => ({ f, ...relevance(f, wanted) })).sort((a, b) => b.count - a.count)
+  const work = facts.filter((f) => ['PROJECT', 'EXPERIENCE'].includes(f.category)).map((f) => ({ f, ...targetRelevance(f, wanted, ctx.roleFamily ?? spec.roleFamily) })).sort((a, b) => b.count - a.count)
   const top = work[0], second = work[1]
   const name = D(profile.identity.fullName) || profile.name
   const p = profile.prefs
@@ -191,9 +203,17 @@ export function buildLetter(profile: Profile, allFacts: Fact[], spec: JobSpec, c
   const add = (text: string, factIds: string[]) => para.push({ id: nid('lp'), text, factIds })
 
   const eduBit = edu ? eduClause(edu, lang, ctx.now) : (ms ? 'seorang pemohon' : 'an applicant')
+  const spec_ = ctx.mode === 'SPECULATIVE_OUTREACH'
+  const area = ctx.focusLabel || ctx.role
+  const industry = D(ctx.industry)
+  const interest = industry ? (ms ? ` Saya berminat dengan ${ctx.company} kerana bidangnya dalam ${industry.toLowerCase()}.` : ` I am interested in ${ctx.company} because of its work in ${industry.toLowerCase()}.`) : ''
+  const intro = spec_
+    ? (ms ? `Saya ingin bertanya sama ada ${ctx.company} menerima pelajar untuk ${ctx.careerType === 'INTERNSHIP' ? 'latihan industri' : 'jawatan'} dalam bidang ${area}. Saya sedar mungkin tiada iklan jawatan, jadi ini hanyalah pertanyaan.`
+        : `I am writing to ask whether ${ctx.company} takes ${ctx.careerType === 'INTERNSHIP' ? 'interns' : 'graduates'} in ${area}. I understand there may be no advertised opening, so this is an enquiry rather than an application.`)
+    : (ms ? `Saya ingin memohon ${phrase} di ${ctx.company}.` : `I am writing to apply for the ${phrase} at ${ctx.company}.`)
   add(ms
-    ? `Saya ingin memohon ${phrase} di ${ctx.company}. Saya ${eduBit}${matchedTech.length ? ` dan kerja terkini saya melibatkan ${listJoin(matchedTech, 'dan')}` : ''}.${when}`
-    : `I am writing to apply for the ${phrase} at ${ctx.company}. I am ${eduBit}${matchedTech.length ? `, and my recent work has used ${listJoin(matchedTech)}` : ''}.${when}`,
+    ? `${intro}${interest} Saya ${eduBit}${matchedTech.length ? ` dan kerja terkini saya melibatkan ${listJoin(matchedTech, 'dan')}` : ''}.${when}`
+    : `${intro}${interest} I am ${eduBit}${matchedTech.length ? `, and my recent work has used ${listJoin(matchedTech)}` : ''}.${when}`,
     [edu?.fact_id, top?.f.fact_id].filter(Boolean) as string[])
 
   if (top) {
@@ -201,7 +221,7 @@ export function buildLetter(profile: Profile, allFacts: Fact[], spec: JobSpec, c
     const tools = top.f.tools.length ? ` (${top.f.tools.slice(0, 5).join(', ')})` : ''
     add(ms
       ? `Projek yang paling berkaitan ialah "${top.f.title}"${tools}. ${bl.length ? bl.join('; ') + '.' : ''}`
-      : `The closest match to this role is my ${top.f.category === 'PROJECT' ? 'project' : 'work'} "${top.f.title}"${tools}. ${bl.length ? bl.join('; ') + '.' : ''}`, [top.f.fact_id])
+      : `The closest match to ${ctx.focusLabel ? `${ctx.focusLabel} work` : 'this role'} is my ${top.f.category === 'PROJECT' ? 'project' : 'work'} "${top.f.title}"${tools}. ${bl.length ? bl.join('; ') + '.' : ''}`, [top.f.fact_id])
   }
   if (second) {
     const bl = bulletsOf(second.f).slice(0, 1).map((b) => b.replace(/[.\s]+$/, ''))
@@ -210,14 +230,16 @@ export function buildLetter(profile: Profile, allFacts: Fact[], spec: JobSpec, c
       : `I also gained relevant experience through "${second.f.title}"${bl.length ? `: ${bl[0]}` : ''}.`, [second.f.fact_id])
   }
   add(ms
-    ? `Resume saya dilampirkan. Saya berbesar hati untuk berbincang lanjut mengenai peranan ini. Terima kasih atas masa dan pertimbangan tuan/puan.`
-    : `My resume is attached. I would welcome the chance to discuss the role and how I could contribute. Thank you for your time and consideration.`, [])
+    ? (spec_ ? `Resume saya dilampirkan. Jika sesuai, saya berbesar hati untuk berbincang ringkas. Terima kasih atas masa tuan/puan.` : `Resume saya dilampirkan. Saya berbesar hati untuk berbincang lanjut mengenai peranan ini. Terima kasih atas masa dan pertimbangan tuan/puan.`)
+    : (spec_ ? `My resume is attached in case it is useful. I would be glad to share more or have a short conversation if there is a fit. Thank you for your time.` : `My resume is attached. I would welcome the chance to discuss the role and how I could contribute. Thank you for your time and consideration.`), [])
 
   const lines = [profile.identity.email, profile.identity.phone, profile.identity.location && tidyText(profile.identity.location), profile.identity.linkedin && shortUrl(profile.identity.linkedin)].filter(Boolean) as string[]
   return {
     schema: 1, language: ms ? 'ms' : 'en', target: { company: ctx.company, role: ctx.role },
     sender: { name, lines }, date: longDate(ctx.now), recipient: ctx.recipientLines?.length ? ctx.recipientLines : [ms ? 'Pengurus Pengambilan / Jabatan Sumber Manusia' : 'Hiring Team', ctx.company],
-    subject: ms ? `Permohonan ${phrase}` : `Application for ${INTERNISH.test(ctx.role) ? ctx.role : ctx.careerType === 'INTERNSHIP' ? `${ctx.role} Internship` : ctx.role}`,
+    subject: spec_ ? (ms ? `Pertanyaan ${ctx.careerType === 'INTERNSHIP' ? 'latihan industri' : 'peluang'}: ${area}` : `${ctx.careerType === 'INTERNSHIP' ? 'Internship' : 'Opportunity'} enquiry: ${area}`)
+      : ms ? `Permohonan ${phrase}` : `Application for ${INTERNISH.test(ctx.role) ? ctx.role : ctx.careerType === 'INTERNSHIP' ? `${ctx.role} Internship` : ctx.role}`,
+    contextStrings: [industry, industry.toLowerCase(), ctx.focusLabel ?? ''].filter(Boolean),
     salutation: ms ? 'Tuan/Puan,' : 'Dear Hiring Team,', paragraphs: para, closing: ms ? 'Yang benar,' : 'Sincerely,', signature: name,
   }
 }
@@ -227,7 +249,7 @@ export interface FactIssue { severity: 'error' | 'warn'; where: string; text: st
 export interface FactCheckResult { passed: boolean; issues: FactIssue[]; checkedClaims: number }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
-const corpusOf = (fs: Fact[]) => norm(fs.map((f) => [f.title, f.organization, f.claim_text, f.tools.join(' '), f.metrics.join(' '), f.date_start, f.date_end].join(' ')).join(' \n '))
+const corpusOf = (fs: Fact[]) => norm(fs.map((f) => [f.title, f.organization, f.claim_text, f.tools.join(' '), f.metrics.join(' '), f.date_start, f.date_end, Object.values(f.details ?? {}).flat().join(' ')].join(' ')).join(' \n '))
 const compact = (s: string) => norm(s).replace(/\s/g, '')
 
 const NUM_CLAIMS = /(\b\d+(?:\.\d+)?\s?(?:%|×|x\b)|\b\d[\d,]*\+?\s?(?:users|clients|customers|requests|records|students|participants|downloads|stars|endpoints|tests|rows|transactions)\b|\bRM\s?\d[\d,.]*|\b\d+\+?\s?(?:years?|yrs)\b|\b\d+\s?(?:ms|seconds?)\b)/gi
@@ -253,10 +275,10 @@ export function factCheckResume(ast: ResumeAST, allFacts: Fact[]): FactCheckResu
   const byId = new Map(facts.map((f) => [f.fact_id, f]))
   const issues: FactIssue[] = []
   let n = 0
-  const allowed = [ast.target.role, ast.target.company]
+  const allowed = [ast.target.role, ast.target.company, ast.target.focus ?? ""]
   if (ast.summary) { n++; issues.push(...factCheckText(ast.summary.text, facts, { where: 'Profile line', allowedStrings: allowed })) }
   const kindNeedsSource = (k: ResumeSection['kind']) => ['projects', 'experience', 'leadership'].includes(k)
-  const skillVals = new Set(facts.filter((f) => f.category === 'SKILL' || f.category === 'LANGUAGE').flatMap((f) => f.tools.map(norm)))
+  const skillVals = new Set(facts.filter((f) => f.category === 'SKILL' || f.category === 'LANGUAGE').flatMap((f) => [...f.tools, ...cleanSkillItems(f.tools).kept].map(norm)))
   for (const s of ast.sections) {
     for (const g of s.skillGroups ?? []) for (const v of g.values) {
       n++
@@ -279,7 +301,7 @@ export function factCheckResume(ast: ResumeAST, allFacts: Fact[]): FactCheckResu
 export function factCheckLetter(letter: LetterAST, allFacts: Fact[]): FactCheckResult {
   const facts = allFacts.filter((f) => f.confirmed)
   const issues: FactIssue[] = []
-  const allowed = [letter.target.role, letter.target.company, letter.subject]
+  const allowed = [letter.target.role, letter.target.company, letter.subject, ...(letter.contextStrings ?? [])]
   for (const p of letter.paragraphs) {
     const scope = p.factIds.map((i) => facts.find((f) => f.fact_id === i)).filter(Boolean) as Fact[]
     issues.push(...factCheckText(p.text, facts, { where: 'Cover letter', allowedStrings: allowed, scope }))

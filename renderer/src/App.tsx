@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Briefcase, Building2, ChevronsUpDown, Home as HomeIcon, ListChecks, Plus, Settings as SettingsIcon, UserRound } from 'lucide-react'
+import { Building2, ChevronsUpDown, Home as HomeIcon, ListChecks, Plus, Settings as SettingsIcon, UserRound } from 'lucide-react'
 import { api, errMsg } from './api'
-import { Ctx, type Boot, type NewAppOpts, type Page } from './ctx'
+import { Ctx, type Boot, type NewAppOpts, type Page, type PrepareOpts } from './ctx'
+import { Logo } from './kit'
+import { PrepareApplication } from './PrepareApplication'
 import { Button, Input, Field, Spinner, ToastHost, cx, useToast } from './ui'
 import { Onboarding } from './Onboarding'
 import { HomePage, ApplicationsPage } from './Applications'
@@ -12,10 +14,10 @@ import { ProfilePage } from './Profile'
 import { SettingsPage } from './Settings'
 
 const NAV: { key: Page; label: string; icon: typeof HomeIcon }[] = [
-  { key: 'home', label: 'Home', icon: HomeIcon },
-  { key: 'applications', label: 'Applications', icon: ListChecks },
   { key: 'companies', label: 'Companies', icon: Building2 },
+  { key: 'applications', label: 'Applications', icon: ListChecks },
   { key: 'profile', label: 'My Profile', icon: UserRound },
+  { key: 'home', label: 'Home', icon: HomeIcon },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ]
 
@@ -25,9 +27,10 @@ function Root() {
   const toast = useToast()
   const [boot, setBoot] = useState<Boot | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
-  const [page, setPage] = useState<Page>('home')
+  const [page, setPage] = useState<Page>('companies')
   const [detail, setDetail] = useState<{ id: string; tab?: string } | null>(null)
   const [newOpts, setNewOpts] = useState<NewAppOpts | null>(null)
+  const [prep, setPrep] = useState<PrepareOpts | null>(null)
   const [tick, setTick] = useState(0)
 
   const refresh = useCallback(async () => {
@@ -38,25 +41,30 @@ function Root() {
   // theme
   const theme = boot?.profile?.prefs?.theme ?? 'system'
   useEffect(() => { const r = document.documentElement; if (theme === 'system') r.removeAttribute('data-theme'); else r.dataset.theme = theme }, [theme])
+  const motion = boot?.profile?.prefs?.motion ?? 'system'
+  useEffect(() => { const r = document.documentElement; if (motion === 'reduced') r.dataset.motion = 'reduced'; else r.removeAttribute('data-motion') }, [motion])
 
   if (fatal) return <div role="alert" className="m-auto max-w-md p-10 text-center"><h1 className="text-lg font-semibold">Career Hub could not start</h1><p className="mt-2 text-muted">{fatal}</p></div>
   if (!boot) return <div className="grid h-full place-items-center"><Spinner label="Opening Career Hub" /></div>
   if (!boot.profile) return <CreateProfile onDone={refresh} />
-  if (!boot.profile.onboarding_done) return <Onboarding boot={boot} refresh={refresh} />
 
   const ctx = {
     boot, refresh, tick,
     go: (p: Page) => { setDetail(null); setPage(p) },
     openApp: (id: string, tab?: string) => setDetail({ id, tab }),
     newApp: (o: NewAppOpts = {}) => setNewOpts(o),
+    prepare: (o: PrepareOpts) => setPrep(o),
   }
+
+  // Onboarding needs the same context (record editors read it), so it is rendered inside the provider too.
+  if (!boot.profile.onboarding_done) return <Ctx.Provider value={ctx}><Onboarding boot={boot} refresh={refresh} /></Ctx.Provider>
 
   return (
     <Ctx.Provider value={ctx}>
       <div className="flex h-full flex-col md:flex-row">
-        <Sidebar boot={boot} page={detail ? 'applications' : page} onNav={ctx.go} onNew={() => ctx.newApp()} onSwitch={async (id) => { await api('profile.switch', { id }); setDetail(null); setPage('home'); await refresh() }} onAdd={async (name) => { try { await api('profile.create', { name }); setDetail(null); setPage('home'); await refresh() } catch (e) { toast('bad', errMsg(e)) } }} />
-        <main id="main" className="scroll-thin min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div key={detail ? `d-${detail.id}` : page} className="anim-fade-up mx-auto w-full max-w-[1280px] px-4 py-5 sm:px-8 sm:py-7">
+        <Sidebar boot={boot} page={detail ? 'applications' : page} onNav={ctx.go} onNew={() => ctx.newApp()} onSwitch={async (id) => { await api('profile.switch', { id }); setDetail(null); setPage('companies'); setPrep(null); setNewOpts(null); await refresh() }} onAdd={async (name) => { try { await api('profile.create', { name }); setDetail(null); setPage('companies'); setPrep(null); setNewOpts(null); await refresh() } catch (e) { toast('bad', errMsg(e)) } }} />
+        <main id="main" className={cx('scroll-thin min-h-0 min-w-0 flex-1', page === 'companies' && !detail ? 'overflow-hidden' : 'overflow-y-auto')}>
+          <div key={detail ? `d-${detail.id}` : page} className={cx('anim-fade-up mx-auto w-full max-w-[1360px] px-4 py-5 sm:px-8 sm:py-7', page === 'companies' && !detail && 'h-full')}>
             {detail ? <AppDetail id={detail.id} initialTab={detail.tab} onBack={() => setDetail(null)} />
               : page === 'home' ? <HomePage />
               : page === 'applications' ? <ApplicationsPage />
@@ -67,6 +75,7 @@ function Root() {
         </main>
       </div>
       {newOpts && <NewApplication opts={newOpts} onClose={() => setNewOpts(null)} />}
+      {prep && <PrepareApplication opts={prep} onClose={() => setPrep(null)} />}
     </Ctx.Provider>
   )
 }
@@ -79,8 +88,8 @@ function CreateProfile({ onDone }: { onDone: () => void }) {
   return (
     <div className="grid h-full place-items-center p-6">
       <div className="anim-fade-up w-full max-w-md">
-        <div className="mb-8 flex items-center gap-2.5"><div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-on-primary"><Briefcase size={18} aria-hidden /></div><span className="text-lg font-semibold tracking-tight">Career Hub</span></div>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome. Let’s set up your private profile.</h1>
+        <div className="mb-8 flex items-center gap-2.5"><Logo size={34} /><span className="font-display text-xl font-semibold">Career Hub</span></div>
+        <h1 className="page-title">Welcome. Let’s set up your private profile.</h1>
         <p className="mt-2 text-muted">Everything stays on this computer. No account, no cloud. You can add other profiles later for someone else who uses this device.</p>
         <form className="mt-6 space-y-4" onSubmit={(e) => { e.preventDefault(); void go() }}>
           <Field label="Your name" error={err}>{(id) => <Input id={id} data-autofocus autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr('') }} placeholder="e.g. Nur Aisyah" autoComplete="name" />}</Field>
@@ -109,7 +118,7 @@ function Sidebar({ boot, page, onNav, onNew, onSwitch, onAdd }: { boot: Boot; pa
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[70] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
       <aside className="flex shrink-0 flex-col gap-3 border-b border-line bg-surface2/50 px-3 py-3 md:w-[236px] md:border-b-0 md:border-r md:px-3.5 md:py-5" aria-label="Primary">
         <div className="flex items-center justify-between gap-2 md:block">
-          <div className="flex items-center gap-2.5 px-1 md:mb-5"><div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-on-primary"><Briefcase size={16} aria-hidden /></div><span className="font-semibold tracking-tight">Career Hub</span></div>
+          <div className="flex items-center gap-2.5 px-1 md:mb-5"><Logo size={30} /><span className="font-display text-lg font-semibold">Career Hub</span></div>
           <div ref={ref} className="relative md:mb-3">
             <button onClick={() => setMenu(!menu)} aria-haspopup="menu" aria-expanded={menu} className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-left text-sm hover:bg-surface2">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary">{p.name.slice(0, 1).toUpperCase()}</span>
@@ -137,7 +146,7 @@ function Sidebar({ boot, page, onNav, onNew, onSwitch, onAdd }: { boot: Boot; pa
             </button>
           ))}
         </nav>
-        <p className="mt-auto hidden px-1 text-xs leading-relaxed text-faint md:block">Private by default — your CV and applications are stored only on this device.</p>
+        <p className="mt-auto hidden px-1 text-xs leading-relaxed text-faint md:block">Private by default — your profile and applications are stored only on this device.</p>
       </aside>
     </>
   )

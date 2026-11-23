@@ -124,3 +124,13 @@ tests/       Vitest suites + fixtures
 scripts/     build, dev, start, e2e, packaging, smoke tests
 DESIGN.md    colours, type, spacing, components, motion
 ```
+
+## V2: profile-first, Cyberjaya-first
+
+* **No resume needed.** Four short setup steps (About you, Studies, Roles & skills, Projects) build a structured profile; every card autosaves. CV import is an optional, review-first shortcut in My Profile.
+* **Structured records**: the `facts` table plus `details_json` (migration 2; an automatic `.bak` copy is written before migrating). Category integrity is enforced by `core/integrity.ts` at the parser, on save/confirm, and again when documents are built.
+* **Explore Cyberjaya**: all 78 seed companies, ranked per profile and role focus by *company target fit* (`core/target.ts`): role 40%, skills 25%, projects 20%, route 15%. Unknown inputs are left out (lower confidence), scores are rounded to 5 and capped by confidence (95/90/75). The research `suitability_score` is never used. Vacancy fit (needs a job ad) and application readiness are separate things.
+* **Prepare application**: one guided flow (role and route, fit and plan, drafts). Speculative drafts say they are enquiries; company context only reorders and frames confirmed facts.
+* Drafts only: no Gmail, OAuth, sending or inbox access (guarded by a test).
+
+Checks: `npm run typecheck`, `npm test` (Vitest uses the `vmThreads` pool here; the default pools fail to register suites in this environment), `npm run build` then `npm run e2e`.

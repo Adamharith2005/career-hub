@@ -122,12 +122,14 @@ export async function readCompanyFile(file: string): Promise<SeedRow[]> {
 
 export async function importCompanyFile(db: DB, file: string) { return importSeedRows(db, await readCompanyFile(file)) }
 
-export interface CompanyFilter { q?: string; roleFamily?: string; ownership?: string; status?: string; tier?: string; hasEmail?: boolean }
+export interface CompanyFilter { q?: string; roleFamily?: string; ownership?: string; status?: string; tier?: string; hasEmail?: boolean; shortlistedOnly?: boolean; includeOutside?: boolean }
 
 export function listCompanies(db: DB, profileId: string, f: CompanyFilter = {}) {
   const rows = all(db, `SELECT * FROM companies WHERE profile_id IS NULL OR profile_id = ? ORDER BY COALESCE(suitability_score,0) DESC, name`, profileId)
+  const star = new Set(all<{ company_id: string }>(db, 'SELECT company_id FROM shortlist WHERE profile_id = ?', profileId).map((r) => r.company_id))
   const q = f.q?.trim().toLowerCase()
-  return rows.map(hydrateCompany).filter((c) =>
+  return rows.map((r) => ({ ...hydrateCompany(r), shortlisted: star.has(r.company_id) })).filter((c) =>
+    (f.includeOutside || c.location.state !== 'OUTSIDE') && (!f.shortlistedOnly || c.shortlisted) &&
     (!q || [c.name, c.industry, c.relevant_roles, c.address, c.ownership_type].join(' ').toLowerCase().includes(q)) &&
     (!f.roleFamily || c.role_families.includes(f.roleFamily)) &&
     (!f.ownership || (c.ownership_type ?? '').toLowerCase().includes(f.ownership.toLowerCase())) &&
@@ -138,14 +140,38 @@ export function listCompanies(db: DB, profileId: string, f: CompanyFilter = {}) 
 export function hydrateCompany(r: any) {
   const lv = r.last_verified as string | null
   const ageDays = lv ? Math.floor((Date.now() - new Date(lv).getTime()) / 86400000) : null
-  return { ...r, role_families: safeParse<string[]>(r.role_families_json, []), flags: safeParse<string[]>(r.flags_json, []), age_days: ageDays, stale: ageDays == null || ageDays > 90 }
+  const flags = safeParse<string[]>(r.flags_json, [])
+  return { ...r, cs_relevance: tidySeedText(r.cs_relevance), research_notes: tidySeedText(r.research_notes), role_families: safeParse<string[]>(r.role_families_json, []), flags,
+    age_days: ageDays, stale: ageDays == null || ageDays > 90, location: locationState(r, flags) }
+}
+
+/** The directory export lost its en-dashes ("Highly Relevant ? Core CS"). Display-only repair; stored text is untouched. */
+export const tidySeedText = (s?: string | null) => (s ? s.replace(/\s\?\s/g, ' – ') : s ?? null)
+
+export type LocationState = 'VERIFIED' | 'CITY_ONLY' | 'UNKNOWN' | 'OUTSIDE'
+/** Cyberjaya-only rule. Never upgrades uncertainty into confirmation: a seed row needs a Cyberjaya address, a verified office and a building-level address. */
+export function locationState(r: { address?: string | null; office_status?: string | null; is_seed?: number | null }, flags: string[] = []): { state: LocationState; note: string } {
+  const addr = (r.address ?? '').trim()
+  if (!addr) return { state: 'UNKNOWN', note: 'No address on record — confirm the Cyberjaya office before relying on this entry.' }
+  if (!/cyberjaya|\b63\d{3}\b/i.test(addr)) return { state: 'OUTSIDE', note: 'The recorded address is not in Cyberjaya.' }
+  if (r.is_seed === 0) return { state: 'CITY_ONLY', note: 'Added by you — Cyberjaya location not independently verified.' }
+  if (flags.includes('BROAD_ADDRESS') || !/verified/i.test(r.office_status ?? ''))
+    return { state: 'CITY_ONLY', note: 'Cyberjaya is listed, but the exact office is not confirmed — verify before visiting.' }
+  return { state: 'VERIFIED', note: 'Office address verified in seed research.' }
+}
+
+export function setShortlist(db: DB, profileId: string, companyId: string, on: boolean) {
+  if (!get(db, 'SELECT 1 FROM companies WHERE company_id = ? AND (profile_id IS NULL OR profile_id = ?)', companyId, profileId)) throw new Error('Unknown company')
+  if (on) run(db, 'INSERT OR IGNORE INTO shortlist (profile_id, company_id, created_at) VALUES (?,?,?)', profileId, companyId, nowIso())
+  else run(db, 'DELETE FROM shortlist WHERE profile_id = ? AND company_id = ?', profileId, companyId)
 }
 
 export function getCompany(db: DB, profileId: string, companyId: string) {
   const r = get(db, 'SELECT * FROM companies WHERE company_id = ? AND (profile_id IS NULL OR profile_id = ?)', companyId, profileId)
   if (!r) return null
   const note = get<{ note: string }>(db, 'SELECT note FROM company_notes WHERE profile_id = ? AND company_id = ?', profileId, companyId)
-  return { ...hydrateCompany(r), user_note: note?.note ?? '' }
+  const starred = !!get(db, 'SELECT 1 FROM shortlist WHERE profile_id = ? AND company_id = ?', profileId, companyId)
+  return { ...hydrateCompany(r), user_note: note?.note ?? '', shortlisted: starred }
 }
 
 export function addUserCompany(db: DB, profileId: string, c: { name: string; website?: string; address?: string; industry?: string; email?: string; notes?: string }) {

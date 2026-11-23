@@ -5,7 +5,7 @@ export interface Prefs {
   internshipStart?: string; internshipEnd?: string; durationWeeks?: number
   workMode?: 'onsite' | 'hybrid' | 'remote' | ''
   expectation?: string; university?: string; graduation?: string
-  language?: 'en' | 'ms'; theme?: 'light' | 'dark' | 'system'; citizenship?: 'malaysian' | 'other' | ''
+  language?: 'en' | 'ms'; theme?: 'light' | 'dark' | 'system'; motion?: 'system' | 'reduced'; citizenship?: 'malaysian' | 'other' | ''
 }
 export interface Identity {
   fullName?: string; email?: string; phone?: string; location?: string
@@ -91,28 +91,57 @@ export interface Fact {
   fact_id: string; profile_id: string; category: FactCategory; title: string; organization: string | null
   date_start: string | null; date_end: string | null; claim_text: string; tools: string[]; metrics: string[]
   source_citation: string; confidence: string; confirmed: boolean; created_at: string
+  details: FactDetails; updated_at: string; sort_order: number
 }
-export const hydrateFact = (r: any): Fact => ({ ...r, tools: safeParse(r.tools_json, []), metrics: safeParse(r.metrics_json, []), confirmed: !!r.confirmed })
+/** Per-category structured fields. All optional; unknown keys are dropped on save. */
+export interface FactDetails {
+  projectType?: 'academic' | 'personal' | 'hackathon' | 'commercial'; purpose?: string; role?: string; outcome?: string; url?: string
+  level?: string; cgpa?: string; cgpaScale?: string; coursework?: string[]
+  employmentType?: 'internship' | 'part-time' | 'full-time' | 'freelance' | 'volunteer'
+  proficiency?: 'beginner' | 'intermediate' | 'advanced'; issuer?: string
+}
+const DETAIL_KEYS = ['projectType', 'purpose', 'role', 'outcome', 'url', 'level', 'cgpa', 'cgpaScale', 'coursework', 'employmentType', 'proficiency', 'issuer']
+export const cleanDetails = (d: unknown): FactDetails => {
+  const out: Record<string, unknown> = {}
+  if (d && typeof d === 'object') for (const k of DETAIL_KEYS) { const v = (d as any)[k]; if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length)) out[k] = typeof v === 'string' ? v.trim() : v }
+  return out as FactDetails
+}
+/** Resume lines for categories that are fully structured (no free-text blob): education, certifications, awards. Pure; used when a record is saved. */
+export function derivedClaimText(f: { category: FactCategory; title: string; organization?: string | null; date_end?: string | null; details?: FactDetails }): string | null {
+  const d = f.details ?? {}
+  if (f.category === 'EDUCATION') {
+    const lines: string[] = []
+    if (d.cgpa) lines.push(`CGPA: ${d.cgpa}${d.cgpaScale ? ` / ${d.cgpaScale}` : ''}`)
+    if (d.coursework?.length) lines.push(`Relevant coursework: ${d.coursework.join(', ')}`)
+    return lines.join('\n')
+  }
+  if (f.category === 'CERTIFICATION' || f.category === 'AWARD')
+    return `${f.title}${f.organization ? `, ${f.organization}` : ''}${f.date_end ? ` (${f.date_end})` : ''}`
+  return null
+}
 
-export type FactInput = Partial<Omit<Fact, 'fact_id' | 'profile_id' | 'created_at'>> & { category: FactCategory; title: string }
+export const hydrateFact = (r: any): Fact => ({ ...r, tools: safeParse(r.tools_json, []), metrics: safeParse(r.metrics_json, []), confirmed: !!r.confirmed, details: cleanDetails(safeParse(r.details_json, {})), updated_at: r.updated_at ?? r.created_at, sort_order: r.sort_order ?? 0 })
+
+export type FactInput = Partial<Omit<Fact, 'fact_id' | 'profile_id' | 'created_at' | 'updated_at'>> & { category: FactCategory; title: string }
 
 export function addFact(db: DB, profileId: string, f: FactInput): string {
   const fact_id = id('f')
-  run(db, `INSERT INTO facts (fact_id, profile_id, category, title, organization, date_start, date_end, claim_text, tools_json, metrics_json, source_citation, confidence, confirmed, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, fact_id, profileId, f.category, f.title, f.organization ?? null, f.date_start ?? null, f.date_end ?? null,
-    f.claim_text ?? '', JSON.stringify(f.tools ?? []), JSON.stringify(f.metrics ?? []), f.source_citation ?? 'manual', f.confidence ?? 'high', f.confirmed ? 1 : 0, nowIso())
+  run(db, `INSERT INTO facts (fact_id, profile_id, category, title, organization, date_start, date_end, claim_text, tools_json, metrics_json, source_citation, confidence, confirmed, created_at, updated_at, details_json, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, fact_id, profileId, f.category, f.title, f.organization ?? null, f.date_start ?? null, f.date_end ?? null,
+    f.claim_text ?? '', JSON.stringify(f.tools ?? []), JSON.stringify(f.metrics ?? []), f.source_citation ?? 'manual', f.confidence ?? 'high', f.confirmed ? 1 : 0, nowIso(), nowIso(), JSON.stringify(cleanDetails(f.details)), f.sort_order ?? 0)
   return fact_id
 }
 export const listFacts = (db: DB, profileId: string, onlyConfirmed = false) =>
-  all(db, `SELECT * FROM facts WHERE profile_id = ? ${onlyConfirmed ? 'AND confirmed = 1' : ''} ORDER BY category, created_at`, profileId).map(hydrateFact)
+  all(db, `SELECT * FROM facts WHERE profile_id = ? ${onlyConfirmed ? 'AND confirmed = 1' : ''} ORDER BY category, sort_order, created_at`, profileId).map(hydrateFact)
 
 export function updateFact(db: DB, profileId: string, factId: string, f: Partial<FactInput>) {
   const cur = get(db, 'SELECT * FROM facts WHERE fact_id=? AND profile_id=?', factId, profileId)
   if (!cur) throw new Error('Fact not found in this profile')
   const c = hydrateFact(cur)
   const n = { ...c, ...f }
-  run(db, `UPDATE facts SET category=?, title=?, organization=?, date_start=?, date_end=?, claim_text=?, tools_json=?, metrics_json=?, confirmed=? WHERE fact_id=? AND profile_id=?`,
-    n.category, n.title, n.organization ?? null, n.date_start ?? null, n.date_end ?? null, n.claim_text ?? '', JSON.stringify(n.tools ?? []), JSON.stringify(n.metrics ?? []), n.confirmed ? 1 : 0, factId, profileId)
+  run(db, `UPDATE facts SET category=?, title=?, organization=?, date_start=?, date_end=?, claim_text=?, tools_json=?, metrics_json=?, confirmed=?, details_json=?, sort_order=?, updated_at=? WHERE fact_id=? AND profile_id=?`,
+    n.category, n.title, n.organization ?? null, n.date_start ?? null, n.date_end ?? null, n.claim_text ?? '', JSON.stringify(n.tools ?? []), JSON.stringify(n.metrics ?? []), n.confirmed ? 1 : 0,
+    JSON.stringify(cleanDetails(n.details)), n.sort_order ?? 0, nowIso(), factId, profileId)
 }
 export const deleteFact = (db: DB, profileId: string, factId: string) => run(db, 'DELETE FROM facts WHERE fact_id=? AND profile_id=?', factId, profileId)
 export const confirmAllFacts = (db: DB, profileId: string) => run(db, 'UPDATE facts SET confirmed=1 WHERE profile_id=?', profileId)

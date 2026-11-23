@@ -15,6 +15,8 @@ export interface EmailCtx {
   kind: EmailKind; language: 'en' | 'ms'; company: string; role: string; roleFamily?: string
   careerType: 'INTERNSHIP' | 'GRADUATE'; attachmentLabels: string[]
   appliedOn?: string | null; hasResponse?: boolean; interviewTopic?: string; interviewDate?: string; requiredTech?: string[]
+  /** Employer's industry from the directory record, quoted only in the speculative enquiry. */
+  industry?: string | null
 }
 
 const by = (fs: Fact[], c: Fact['category']) => fs.filter((f) => f.confirmed && f.category === c)
@@ -55,6 +57,9 @@ export function buildEmail(profile: Profile, facts: Fact[], c: EmailCtx): EmailD
   const points: string[] = []
   work.slice(0, 2).forEach(({ f }) => { const l = firstLine(f); points.push(`- ${f.title}${f.tools.length ? ` (${f.tools.slice(0, 4).join(', ')})` : ''}${l ? `: ${l}` : ''}`) })
   if (skills && skills.tools.length) points.push(`- ${ms ? 'Kemahiran utama' : 'Core skills'}: ${skills.tools.slice(0, 8).join(', ')}`)
+  const industry = (c.industry ?? '').trim()
+  const interestEn = industry ? ` I am interested in ${c.company} because of its work in ${industry.toLowerCase()}.` : ''
+  const interestMs = industry ? ` Saya berminat dengan ${c.company} kerana bidangnya dalam ${industry.toLowerCase()}.` : ''
   const pointsBlock = points.length ? `${ms ? 'Beberapa perkara yang berkaitan:' : 'A few relevant points:'}\n${points.join('\n')}` : ''
 
   let subject = '', body = ''
@@ -68,8 +73,8 @@ export function buildEmail(profile: Profile, facts: Fact[], c: EmailCtx): EmailD
     const area = c.roleFamily && c.roleFamily !== 'other' ? roleLabel(c.roleFamily) : c.role
     subject = ms ? `Pertanyaan ${kindWord}: ${area}${dates ? ` (${dates})` : ''} - ${name}${subjUni}` : `${c.careerType === 'INTERNSHIP' ? 'Internship' : 'Opportunity'} Enquiry: ${area}${dates ? ` (${dates})` : ''} - ${name}${subjUni}`
     body = ms
-      ? [`Tuan/Puan,`, `Saya ingin bertanya sama ada ${c.company} menerima pelajar untuk ${kindWord} dalam bidang ${area}. Saya tahu tiada iklan jawatan ketika ini, jadi ini hanyalah pertanyaan.${who ? ` Saya ${who}${dates ? ` dan tersedia ${dates}` : ''}.` : ''}`, pointsBlock, att, `Jika sesuai, saya berbesar hati untuk berbincang ringkas atau menghantar maklumat tambahan. Terima kasih.`, `Yang benar,\n${sig}`].filter(Boolean).join('\n\n')
-      : [`Dear Hiring Team,`, `I am writing to ask whether ${c.company} takes ${c.careerType === 'INTERNSHIP' ? 'interns' : 'graduates'} in ${area}. I understand there may be no advertised opening, so this is an enquiry rather than an application.${who ? ` I am ${who}${dates ? `, available ${dates}` : ''}.` : ''}`, pointsBlock, att, `If it is useful, I would be glad to share more or have a short conversation. Thank you for your time.`, `Kind regards,\n${sig}`].filter(Boolean).join('\n\n')
+      ? [`Tuan/Puan,`, `Saya ingin bertanya sama ada ${c.company} menerima pelajar untuk ${kindWord} dalam bidang ${area}. Saya tahu tiada iklan jawatan ketika ini, jadi ini hanyalah pertanyaan.${interestMs}${who ? ` Saya ${who}${dates ? ` dan tersedia ${dates}` : ''}.` : ''}`, pointsBlock, att, `Jika sesuai, saya berbesar hati untuk berbincang ringkas atau menghantar maklumat tambahan. Terima kasih.`, `Yang benar,\n${sig}`].filter(Boolean).join('\n\n')
+      : [`Dear Hiring Team,`, `I am writing to ask whether ${c.company} takes ${c.careerType === 'INTERNSHIP' ? 'interns' : 'graduates'} in ${area}. I understand there may be no advertised opening, so this is an enquiry rather than an application.${interestEn}${who ? ` I am ${who}${dates ? `, available ${dates}` : ''}.` : ''}`, pointsBlock, att, `If it is useful, I would be glad to share more or have a short conversation. Thank you for your time.`, `Kind regards,\n${sig}`].filter(Boolean).join('\n\n')
   } else if (c.kind === 'FOLLOW_UP') {
     subject = ms ? `Susulan: Permohonan ${c.role} - ${name}` : `Following up: ${c.role} application - ${name}`
     const first = c.hasResponse

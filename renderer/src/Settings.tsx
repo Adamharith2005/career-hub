@@ -85,6 +85,7 @@ export function SettingsPage() {
         <Card title="Appearance & language">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Theme">{(id) => <Select id={id} value={p.prefs.theme ?? 'system'} onChange={(e) => savePrefs({ theme: e.target.value })}><option value="system">Match my system</option><option value="light">Light</option><option value="dark">Dark</option></Select>}</Field>
+            <Field label="Animations" hint="Reduce turns off movement and transitions. Nothing depends on animation.">{(id) => <Select id={id} value={p.prefs.motion ?? "system"} onChange={(e) => savePrefs({ motion: e.target.value })}><option value="system">Match my system</option><option value="reduced">Reduce motion</option></Select>}</Field>
             <Field label="Default language for documents">{(id) => <Select id={id} value={p.prefs.language ?? 'en'} onChange={(e) => savePrefs({ language: e.target.value })}><option value="en">English</option><option value="ms">Bahasa Malaysia</option></Select>}</Field>
           </div>
         </Card>
