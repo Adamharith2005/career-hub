@@ -3,7 +3,8 @@ import { Building2, ChevronsUpDown, Home as HomeIcon, ListChecks, Plus, Settings
 import { api, errMsg } from './api'
 import { Ctx, type Boot, type NewAppOpts, type Page, type PrepareOpts } from './ctx'
 import { Logo } from './kit'
-import { PrepareApplication } from './PrepareApplication'
+import { PackScreen } from './PackScreen'
+import { ProfilePicker } from './ProfilePicker'
 import { Button, Input, Field, Spinner, ToastHost, cx, useToast } from './ui'
 import { Onboarding } from './Onboarding'
 import { HomePage, ApplicationsPage } from './Applications'
@@ -15,9 +16,8 @@ import { SettingsPage } from './Settings'
 
 const NAV: { key: Page; label: string; icon: typeof HomeIcon }[] = [
   { key: 'companies', label: 'Companies', icon: Building2 },
-  { key: 'applications', label: 'Applications', icon: ListChecks },
+  { key: 'applications', label: 'My Applications', icon: ListChecks },
   { key: 'profile', label: 'My Profile', icon: UserRound },
-  { key: 'home', label: 'Home', icon: HomeIcon },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ]
 
@@ -32,6 +32,7 @@ function Root() {
   const [newOpts, setNewOpts] = useState<NewAppOpts | null>(null)
   const [prep, setPrep] = useState<PrepareOpts | null>(null)
   const [tick, setTick] = useState(0)
+  const [picked, setPicked] = useState<string | null>(null)   // always ask who is applying at launch
 
   const refresh = useCallback(async () => {
     try { setBoot(await api('boot')); setTick((t) => t + 1) } catch (e) { setFatal(errMsg(e)) }
@@ -39,14 +40,14 @@ function Root() {
   useEffect(() => { void refresh() }, [refresh])
 
   // theme
-  const theme = boot?.profile?.prefs?.theme ?? 'system'
+  const theme = boot?.profile?.prefs?.theme ?? 'dark'
   useEffect(() => { const r = document.documentElement; if (theme === 'system') r.removeAttribute('data-theme'); else r.dataset.theme = theme }, [theme])
   const motion = boot?.profile?.prefs?.motion ?? 'system'
   useEffect(() => { const r = document.documentElement; if (motion === 'reduced') r.dataset.motion = 'reduced'; else r.removeAttribute('data-motion') }, [motion])
 
   if (fatal) return <div role="alert" className="m-auto max-w-md p-10 text-center"><h1 className="text-lg font-semibold">Career Hub could not start</h1><p className="mt-2 text-muted">{fatal}</p></div>
   if (!boot) return <div className="grid h-full place-items-center"><Spinner label="Opening Career Hub" /></div>
-  if (!boot.profile) return <CreateProfile onDone={refresh} />
+  if (!picked || !boot.profile) return <ProfilePicker boot={boot} refresh={refresh} onPick={async (id) => { try { await api('profile.switch', { id }); await refresh(); setPage('companies'); setDetail(null); setPicked(id) } catch (e) { setFatal(errMsg(e)) } }} />
 
   const ctx = {
     boot, refresh, tick,
@@ -75,7 +76,7 @@ function Root() {
         </main>
       </div>
       {newOpts && <NewApplication opts={newOpts} onClose={() => setNewOpts(null)} />}
-      {prep && <PrepareApplication opts={prep} onClose={() => setPrep(null)} />}
+      {prep && <PackScreen key={`${boot.profile.profile_id}:${prep.companyId}`} opts={prep} onClose={() => setPrep(null)} />}
     </Ctx.Provider>
   )
 }
@@ -122,13 +123,13 @@ function Sidebar({ boot, page, onNav, onNew, onSwitch, onAdd }: { boot: Boot; pa
           <div ref={ref} className="relative md:mb-3">
             <button onClick={() => setMenu(!menu)} aria-haspopup="menu" aria-expanded={menu} className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-left text-sm hover:bg-surface2">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary">{p.name.slice(0, 1).toUpperCase()}</span>
-              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span><ChevronsUpDown size={14} className="text-muted" aria-hidden />
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium leading-tight" data-testid="active-profile">{p.name}</span>{p.prefs?.badge && <span className="block truncate text-[11px] leading-tight text-muted">{p.prefs.badge}</span>}</span><ChevronsUpDown size={14} className="text-muted" aria-hidden />
             </button>
             {menu && (
               <div role="menu" className="anim-fade absolute left-0 right-0 top-full z-30 mt-1 min-w-[220px] rounded-lg border border-line bg-surface p-1 shadow-lg">
                 {boot.profiles.map((x) => <button key={x.profile_id} role="menuitem" onClick={() => { setMenu(false); if (x.profile_id !== p.profile_id) onSwitch(x.profile_id) }} className={cx('flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-surface2', x.profile_id === p.profile_id && 'font-semibold')}>{x.name}{x.profile_id === p.profile_id && <span aria-label="current">✓</span>}</button>)}
-                <div className="my-1 border-t border-line" />
-                {adding ? (
+                {!boot.profiles.some((x) => x.stable_key) && <div className="my-1 border-t border-line" />}
+                {boot.profiles.some((x) => x.stable_key) ? null : adding ? (
                   <form className="flex gap-1 p-1" onSubmit={(e) => { e.preventDefault(); if (name.trim()) { onAdd(name); setName(''); setAdding(false); setMenu(false) } }}>
                     <Input aria-label="New profile name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-8 py-1" /><Button size="sm" type="submit" variant="primary">Add</Button>
                   </form>
@@ -137,7 +138,6 @@ function Sidebar({ boot, page, onNav, onNew, onSwitch, onAdd }: { boot: Boot; pa
             )}
           </div>
         </div>
-        <Button variant="primary" onClick={onNew} icon={<Plus size={16} aria-hidden />} className="w-full">New application</Button>
         <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label="Main">
           {NAV.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => onNav(key)} aria-current={page === key ? 'page' : undefined}

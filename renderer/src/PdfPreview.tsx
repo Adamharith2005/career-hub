@@ -61,3 +61,42 @@ export function PdfPreview({ bytes, label }: { bytes: Uint8Array | null; label: 
     </div>
   )
 }
+
+/** First page of the REAL exported PDF as a small thumbnail (not a mock-up of the content). */
+export function PdfThumb({ bytes, label }: { bytes: Uint8Array | null; label: string }) {
+  const host = useRef<HTMLDivElement>(null)
+  const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  useEffect(() => {
+    const el = host.current
+    if (!el || !bytes) return
+    let cancelled = false
+    setState('loading')
+    const task = pdfjs.getDocument({ data: bytes.slice() })
+    ;(async () => {
+      try {
+        const doc = await task.promise
+        const page = await doc.getPage(1)
+        const base = page.getViewport({ scale: 1 })
+        const w = Math.max(160, el.clientWidth || 260)
+        const dpr = Math.min(2, window.devicePixelRatio || 1)
+        const vp = page.getViewport({ scale: (w / base.width) * dpr })
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.floor(vp.width); canvas.height = Math.floor(vp.height)
+        canvas.style.width = '100%'; canvas.style.display = 'block'
+        canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${label}, first page of ${doc.numPages}`)
+        await page.render({ canvas, viewport: vp } as any).promise
+        if (cancelled) return
+        el.replaceChildren(canvas); el.dataset.pages = String(doc.numPages)
+        setState('ok')
+      } catch { if (!cancelled) setState('error') }
+    })()
+    return () => { cancelled = true; void task.destroy() }
+  }, [bytes, label])
+  return (
+    <div className="relative overflow-hidden rounded-md bg-white shadow-[0_1px_3px_rgba(0,0,0,.25),0_8px_24px_rgba(0,0,0,.12)]" style={{ aspectRatio: '210 / 297' }} data-testid="pdf-thumb" data-state={state}>
+      <div ref={host} className="h-full w-full" />
+      {state === 'loading' && <div className="absolute inset-0 grid place-items-center bg-white"><Spinner label="Drawing preview" /></div>}
+      {state === 'error' && <p role="alert" className="absolute inset-0 grid place-items-center p-3 text-center text-xs text-neutral-600">Preview unavailable. The PDF is still saved.</p>}
+    </div>
+  )
+}

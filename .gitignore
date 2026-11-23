@@ -5,3 +5,8 @@ release/
 *.log
 .env
 test-output/
+
+# PRIVATE: personal CVs, contact details, curated facts. Never commit.
+private-import/
+*.private.json
+*.eml

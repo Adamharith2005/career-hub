@@ -52,9 +52,9 @@ export function assess(input: {
   const factTech = (f: Fact) => new Set(findTech([f.title, f.claim_text, f.tools.join(' ')].join('\n')))
   const matched: Assessment['matched'] = [], partial: Assessment['partial'] = [], missing: string[] = []
   const evalReq = (t: string) => {
-    const work = workFacts.filter((f) => factTech(f).has(t))
+    const work = workFacts.filter((f) => f.maturity !== 'proposal' && factTech(f).has(t))   // a proposal is not demonstrated work
     if (work.length) return { kind: 'matched' as const, ids: work.map((f) => f.fact_id), titles: work.map((f) => f.title) }
-    const sk = skillFacts.filter((f) => factTech(f).has(t))
+    const sk = [...skillFacts, ...workFacts.filter((f) => f.maturity === 'proposal')].filter((f) => factTech(f).has(t))
     if (sk.length) return { kind: 'partial' as const, ids: sk.map((f) => f.fact_id), titles: sk.map((f) => f.title) }
     return { kind: 'missing' as const, ids: [], titles: [] }
   }

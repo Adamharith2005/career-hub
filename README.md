@@ -93,7 +93,7 @@ The brief suggested Tauri v2 and a Python sidecar. This machine has **no Rust to
 
 ## Tests
 
-* `npm test` – 53 tests, including: 78-row import with both rank-25 rows kept, A/B/C/D mapping (12/29/3/34), real `.xlsx` import, profile isolation, no-facts → no documents, invented *Kubernetes* / *65%* blocked, evidence IDs on matches, AI no-key/quota/auth/network/garbage handling, applied-only-on-confirmation, Deriv→Experian leak check, PDF/DOCX extraction QA, `.eml` attachment bytes equal exported-file checksums, deleted-file recovery, role/setting persistence after reopening the DB, SSRF and path-traversal guards, API-key never in the database.
+* `npm test` – 106 tests (V1 + V2 + V3), including: 78-row import with both rank-25 rows kept, A/B/C/D mapping (12/29/3/34), real `.xlsx` import, profile isolation, no-facts → no documents, invented *Kubernetes* / *65%* blocked, evidence IDs on matches, AI no-key/quota/auth/network/garbage handling, applied-only-on-confirmation, Deriv→Experian leak check, PDF/DOCX extraction QA, `.eml` attachment bytes equal exported-file checksums, deleted-file recovery, role/setting persistence after reopening the DB, SSRF and path-traversal guards, API-key never in the database.
 * `npm run e2e` – real Electron: onboarding → import → confirm → folder → analyse → generate (A4 canvas aspect checked) → blocked invented claim → `.eml` → mark applied → board drag → relaunch persistence → missing-file banner → dark theme / reduced motion → keyboard/focus trap → 1440 / 1024 / 390 px without horizontal scroll → second profile isolation.
 
 Fixture people and companies (e.g. "Alex Tester", "Fixture Corp") exist only inside tests; the app ships with no demo data.
@@ -134,3 +134,30 @@ DESIGN.md    colours, type, spacing, components, motion
 * Drafts only: no Gmail, OAuth, sending or inbox access (guarded by a test).
 
 Checks: `npm run typecheck`, `npm test` (Vitest uses the `vmThreads` pool here; the default pools fail to register suites in this environment), `npm run build` then `npm run e2e`.
+
+## V3: two-profile application packs (current)
+
+Open as one of two people, choose a Cyberjaya company, and get five things ready to **copy or download**: the company email (only a real public address from the research, otherwise an explicit "No verified public email" plus the official careers route), an email subject, personalised email wording, `resume.pdf` and `cv.pdf`.
+
+**This release is a local, human-controlled draft generator.** There is no Gmail/OAuth/SMTP, no inbox access, no sending, no tracking and no automatic follow-up. Applications are saved as **Prepared** and only ever become *Applied* when you confirm that yourself.
+
+* **First screen** (every launch): "Who's applying today?" with exactly two profile cards. One click opens that profile's Cyberjaya companies. The active person is always shown in the sidebar, and one click switches profiles. Data is isolated per profile: facts, drafts, files, scores and application history never cross.
+* **Companies** → pick a company → **Prepare application**. The role defaults to the best-fitting role the person actually holds (change it with one click), or paste a real job post. One pass produces the pack on **one screen**: email, subject, wording (editable, autosaved, kept when you regenerate), resume and CV with real PDF thumbnails, copy buttons that write the real clipboard, per-file download, and *Download all* (.zip with `resume.pdf`, `cv.pdf` and a notes file).
+* **Resume vs CV** (not duplicates): the resume is one concise A4 page (2–3 strongest projects, key leadership); the CV is fuller (all projects, all bullets, coursework, secondary education, all leadership, links to relevant public repos), up to two pages. Both are single-column, ATS-safe, selectable text; each export is checked from the actual bytes (text, headings, links, page count, other-company names).
+* **Evidence, not hype.** Every fact has a status (`DOCUMENTED`, `USER_REPORTED`, `IN_PROGRESS`, `NEEDS_CONFIRMATION`, `REPO_OBSERVED`), a source and an audit-log entry. Unconfirmed facts never reach a document. A *proposed / in-progress* project is written as proposed ("Proposed: …", "Planned evaluation…") and counts as partial evidence only, never as a skill. Items flagged "to be confirmed" are listed in *Check before you send*.
+* **Scores** are labelled **Company/role alignment estimate** (or **Vacancy fit** only when you pasted a real job post): never an ATS score. The pack shows *before tailoring → after tailoring*, a separate **Confidence** (High/Medium/Low) with reasons, and a plain list of met / partly met / missing / unknown. A role outside the profile's own roles counts at half weight; with no job post an estimate never exceeds 85; a company with no documented internship route never reaches the top bands; green needs ≥ 80 **and** passing document checks, a real route and adequate confidence. Tailoring only reorders and selects what you can already prove; it cannot add skills.
+* **Dates**: an applicant's stated availability is used verbatim; with none on the profile the email says dates can be confirmed. An *application month* is never turned into an internship start date.
+
+### Private profile import (new machine or first run)
+
+Profile data (names, contact details, CV facts) is **personal**. It lives in a git-ignored folder and is never committed:
+
+1. Put the curated payload at `private-import/profiles.payload.json` (schema: `core/twoprofile.ts`; every fact needs `status` and `source_ref`). Keep the original PDFs next to it under `private-import/source_pdfs/`; they are copied untouched and hashed, never modified.
+2. Either launch the app (it imports automatically when a payload is found in `private-import/` or `%APPDATA%/Career Hub/import/` and the profiles are not yet in the database), or run `npm run import:profiles -- [payload.json] [--db path] [--storage folder]`.
+3. The import is **idempotent** (stable profile keys, `import_key` per fact): re-running adds/changes nothing, never overwrites a fact you edited, never creates duplicates, and **backs up the database first**. An existing profile with the same name or email is *adopted*, so its applications and history are kept; its old, unreviewed parsed facts are set aside (un-confirmed, not deleted).
+4. `node scripts/run-debug.mjs scripts/adopt-check.ts <careerhub.db> <payload.json>` dry-runs an import on a **copy** of a database and reports what would change.
+
+Tests and CI use only fictional people (`tests/payload.ts`); a test fails if any tracked file contains identity data from your private payload.
+
+### V3 checks
+`npm run typecheck` · `npm test` (106 tests) · `npm run build && npm run e2e` (20 steps in the real Electron app: picker, five outputs, real downloads, clipboard, isolation, responsive, no network). `E2E_PAYLOAD=private-import/profiles.payload.json npm run e2e` runs the same against your real profiles (screenshots go to the git-ignored `test-output/screens-real/`). `npm run pack:demo -- <payload> <profileKey> "<Company>" <roleFamily> "<Role title>"` prepares a pack on a throwaway database and prints it.

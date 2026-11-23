@@ -19,7 +19,9 @@ import type { Fact, Profile } from './profiles.ts'
 export const TARGET_WEIGHTS = { role: 0.40, skills: 0.25, projects: 0.20, route: 0.15 } as const
 export type TargetKey = keyof typeof TARGET_WEIGHTS
 /** Ceiling per confidence level: a company-level estimate never displays 100, and thin evidence cannot display a very high number. */
-export const SCORE_CEILING = { HIGH: 95, MEDIUM: 90, LOW: 75 } as const
+export const SCORE_CEILING = { HIGH: 85, MEDIUM: 85, LOW: 75 } as const
+/** Without a documented internship route (status C/D) a company is a speculative target: it never scores into the top two bands. */
+export const NO_ROUTE_CEILING = 75
 
 /** Technologies typical for each role family. A *hint about the field*, never a claim about what a specific employer requires. */
 export const FAMILY_TECH: Record<Exclude<RoleFamily, 'other'>, string[]> = {
@@ -27,7 +29,7 @@ export const FAMILY_TECH: Record<Exclude<RoleFamily, 'other'>, string[]> = {
   frontend: ['JavaScript', 'TypeScript', 'React', 'Vue', 'Angular', 'HTML', 'CSS', 'Figma', 'Tailwind CSS', 'Next.js'],
   backend: ['Java', 'Python', 'Node.js', 'SQL', 'REST APIs', 'Spring Boot', 'PostgreSQL', 'MySQL', 'Docker', 'Express', 'Django', 'FastAPI'],
   ai_ml: ['Python', 'TensorFlow', 'PyTorch', 'Scikit-learn', 'Pandas', 'NumPy', 'Machine Learning', 'Deep Learning', 'NLP', 'LLM', 'OpenCV'],
-  data: ['SQL', 'Python', 'Pandas', 'Power BI', 'Tableau', 'Excel', 'ETL', 'Spark', 'PostgreSQL', 'MySQL'],
+  data: ['SQL', 'Python', 'Pandas', 'Power BI', 'Tableau', 'Excel', 'ETL', 'Spark', 'PostgreSQL', 'MySQL', 'Hadoop', 'Apache Hive', 'DAX', 'Matplotlib'],
   cyber: ['Linux', 'Wireshark', 'Nmap', 'Burp Suite', 'SIEM', 'Kali Linux', 'Penetration Testing', 'OWASP Top 10', 'Splunk', 'Python'],
   cloud_devops: ['Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'Linux', 'Terraform', 'CI/CD', 'Jenkins', 'GitHub Actions', 'Ansible', 'Bash'],
   qa: ['Selenium', 'Cypress', 'Playwright', 'Jest', 'Pytest', 'JUnit', 'Postman', 'JMeter', 'Agile'],
@@ -77,7 +79,7 @@ const ROUTE_NOTE: Record<string, string> = {
 }
 
 export const labelFor = (score: number, confidence: TargetFit['confidence']): FitLabel => {
-  const raw: FitLabel = score >= 78 ? 'Excellent target' : score >= 62 ? 'Strong target' : score >= 42 ? 'Possible target' : 'Low match'
+  const raw: FitLabel = score >= 80 ? 'Excellent target' : score >= 62 ? 'Strong target' : score >= 42 ? 'Possible target' : 'Low match'
   // Limited evidence can never produce the two top labels.
   return confidence === 'LOW' && (raw === 'Excellent target' || raw === 'Strong target') ? 'Possible target' : raw
 }
@@ -87,6 +89,7 @@ export function profileTech(facts: Fact[]) {
   const confirmed = facts.filter((f) => f.confirmed)
   const skill = new Set<string>(), work = new Set<string>()
   for (const f of confirmed) {
+    if (f.maturity === 'proposal') continue   // a proposed project is a topic of study, not demonstrated skill
     if (f.category === 'SKILL') for (const t of f.tools) for (const c of findTech(t)) skill.add(c)
     if (['PROJECT', 'EXPERIENCE'].includes(f.category)) for (const c of findTech([f.title, f.claim_text, f.tools.join(' ')].join('\n'))) work.add(c)
   }
@@ -97,7 +100,8 @@ export function factFamilies(f: Fact): string[] {
   const text = [f.title, f.claim_text, f.tools.join(' '), f.details?.purpose ?? ''].join('\n')
   const techs = new Set(findTech(text))
   const fams = new Set<string>(classifyRoleFamilies(`${f.title} ${f.details?.purpose ?? ''} ${f.claim_text}`))
-  for (const fam of Object.keys(FAMILY_TECH)) if (famTech(fam).some((t) => techs.has(t))) fams.add(fam)
+  // A family is inferred from technology only with two or more of its technologies: one shared tool (e.g. Linux) does not make a project "cloud" or "security".
+  for (const fam of Object.keys(FAMILY_TECH)) if (famTech(fam).filter((t) => techs.has(t)).length >= 2) fams.add(fam)
   return [...fams]
 }
 
@@ -142,7 +146,10 @@ export function targetFit(input: FitInput): TargetFit {
   // ---- role. Primary target counts fully; other chosen targets 0.7; adjacent families 0.4. (Nearly every seed company lists "swe", so a
   //      secondary SWE target must not outrank someone whose PRIMARY target is the employer's specialty.)
   const WS = 0.7, WADJ = 0.4
-  const roleScores = roles.map((r) => ({ r, v: cFams.includes(r) ? (r === primary ? 1 : WS) : cFams.some((f) => (ADJACENT_ROLES[r] ?? []).includes(f)) ? WADJ : 0 }))
+  // A role you pick that is NOT among the roles on your profile is a stretch: it counts at half weight, so choosing a role never raises the score by itself.
+  const owned = new Set((profile.roles as string[]) ?? [])
+  const stretch = (r: string) => (input.focusRoles?.length && owned.size && !owned.has(r) ? 0.5 : 1)
+  const roleScores = roles.map((r) => ({ r, v: stretch(r) * (cFams.includes(r) ? (r === primary ? 1 : WS) : cFams.some((f) => (ADJACENT_ROLES[r] ?? []).includes(f)) ? WADJ : 0) }))
   const roleV = cFams.length ? Math.max(0, ...roleScores.map((x) => x.v)) : null
   const matchedRoles = roleScores.filter((x) => x.v >= WADJ).sort((a, b) => b.v - a.v).map((x) => ({
     role: x.r, label: roleLabel(x.r), why: x.v >= WS ? `${company.name}’s researched roles include ${roleLabel(x.r)}.` : `Related to ${roleLabel(x.r)} through adjacent roles.`,
@@ -183,7 +190,8 @@ export function targetFit(input: FitInput): TargetFit {
     const fams = factFamilies(f)
     const direct = fams.filter((x) => evidenceFams.includes(x))
     const adj = fams.filter((x) => cFams.some((c) => (ADJACENT_ROLES[x] ?? []).includes(c)))
-    const score = direct.length ? Math.max(...direct.map(famWeight)) : adj.length ? 0.4 : 0
+    const raw = direct.length ? Math.max(...direct.map(famWeight)) : adj.length ? 0.4 : 0
+    const score = f.maturity === 'proposal' ? raw * 0.5 : raw   // proposal: partial evidence only
     return { f, direct, score }
   }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score)
   if (workFacts.length && cFams.length) {
@@ -212,7 +220,8 @@ export function targetFit(input: FitInput): TargetFit {
   else if (relevant.length >= 1 && skillFacts.length >= 3) confidence = 'HIGH'
   if (!workFacts.length) missingProfile.push('A project would make this fit more reliable')
   // Researched inputs are estimates, so no score may claim certainty: ceiling by evidence confidence.
-  const score = Math.min(rounded, SCORE_CEILING[confidence])
+  const documentedRoute = status === 'VERIFIED_ACTIVE_VACANCY' || status === 'DOCUMENTED_PROGRAM_NO_ACTIVE_LISTING'
+  const score = Math.min(rounded, SCORE_CEILING[confidence], documentedRoute ? 100 : NO_ROUTE_CEILING)
 
   // ---- narrative
   const reasons: string[] = []

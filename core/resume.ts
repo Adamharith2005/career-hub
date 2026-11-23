@@ -62,7 +62,9 @@ function relevance(f: Fact, wanted: Set<string>) {
 }
 const endKey = (f: Fact) => (/present|current|ongoing|now/i.test(f.date_end ?? '') ? 9999 : Number((f.date_end ?? f.date_start ?? '').match(/\d{4}/)?.[0] ?? 0))
 
-export interface BuildOpts { language?: 'en' | 'ms'; careerType?: 'INTERNSHIP' | 'GRADUATE'; maxProjects?: number; focusLabel?: string }
+export interface BuildOpts { language?: 'en' | 'ms'; careerType?: 'INTERNSHIP' | 'GRADUATE'; maxProjects?: number; focusLabel?: string
+  /** 'resume' = concise one-pager (default). 'cv' = fuller document: every project, all bullets, coursework, all leadership, secondary education. */
+  detail?: 'resume' | 'cv' }
 
 /** Relevance of a fact to the target: technology overlap with the wanted set, plus one point when it belongs to the target role family. */
 function targetRelevance(f: Fact, wanted: Set<string>, roleFamily?: string) {
@@ -88,7 +90,8 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
   const sections: ResumeSection[] = []
 
   // Education
-  const edu = facts.filter((f) => f.category === 'EDUCATION')
+  const cv = opts.detail === 'cv'
+  const edu = facts.filter((f) => f.category === 'EDUCATION' && (cv || f.details?.level !== 'secondary'))
   if (edu.length) {
     sections.push({
       id: 'education', title: 'Education', kind: 'education',
@@ -96,11 +99,11 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
         // Drop claim lines that merely repeat the heading (optionally followed by a date range) — they are not achievements.
         const MON = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+'
         const bare = (s: string) => s.replace(new RegExp(`\\b(?:${MON})?\\d{4}\\s*(?:[-–—]|to)\\s*(?:(?:${MON})?\\d{4}|present|current)`, 'gi'), '').replace(/[\s|,–—-]+$/g, '').trim().toLowerCase()
-        const lines = splitLines(f.claim_text).filter((l) => bare(l) !== '' && bare(l) !== bare(f.title) && bare(l) !== bare(f.organization ?? '') && l.length < 160)
+        const lines = splitLines(f.claim_text).filter((l) => bare(l) !== '' && bare(l) !== bare(f.title) && bare(l) !== bare(f.organization ?? '') && l.length < 220)
         const heading = D(f.organization) || f.title
         const sub = f.organization && f.title !== f.organization ? f.title : undefined
         return { id: nid('e'), heading, subheading: sub, dates: dateRange(f.date_start, f.date_end), factIds: [f.fact_id],
-          bullets: lines.filter((l) => l !== sub && l !== heading).slice(0, 3).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) }
+          bullets: lines.filter((l) => l !== sub && l !== heading).slice(0, cv ? 4 : 3).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) }
       }),
     })
     edu.forEach((f) => log.push({ kind: 'included', factId: f.fact_id, section: 'Education', reason: 'Education is always shown' }))
@@ -115,22 +118,23 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
       vals.sort((a, b) => rel(a) - rel(b))   // stable: relevant first, others keep order
       return { label: f.category === 'LANGUAGE' ? 'Spoken languages' : f.title, values: vals, factIds: [f.fact_id] }
     }).filter((g) => g.values.length)
-    groups.sort((a, b) => Number(b.values.some((v) => findTech(v).some((t) => wanted.has(t)))) - Number(a.values.some((v) => findTech(v).some((t) => wanted.has(t)))))
+    const hit = (g: SkillGroup) => Number(g.values.some((v) => findTech(v).some((t) => wanted.has(t))))
+    groups.sort((a, b) => Number(a.label === 'Spoken languages') - Number(b.label === 'Spoken languages') || hit(b) - hit(a))   // languages always last; then job-relevant groups first
     sections.push({ id: 'skills', title: 'Technical Skills', kind: 'skills', skillGroups: groups })
     log.push({ kind: 'ordered', section: 'Technical Skills', reason: 'Skills that appear in the job description are listed first. No skills were added.' })
   }
 
   // Projects (ranked by overlap with the job)
-  const maxP = opts.maxProjects ?? (career === 'INTERNSHIP' ? 3 : 4)
+  const maxP = opts.maxProjects ?? (cv ? 8 : career === 'INTERNSHIP' ? 3 : 4)
   const projects = facts.filter((f) => f.category === 'PROJECT')
     .map((f) => ({ f, ...targetRelevance(f, wanted, spec.roleFamily) })).sort((a, b) => b.count - a.count || endKey(b.f) - endKey(a.f))
   const chosenP = projects.slice(0, maxP)
   const projSection: ResumeSection | null = chosenP.length ? {
     id: 'projects', title: 'Projects', kind: 'projects',
     items: chosenP.map(({ f, overlap }, i) => {
-      const tools = [f.details?.role ? `Role: ${f.details.role}` : '', f.tools.length ? `Technologies: ${f.tools.join(', ')}` : ''].filter(Boolean).join(' | ') || undefined
+      const tools = [f.details?.context ?? '', f.details?.role ? `Role: ${f.details.role}` : '', f.tools.length ? `Technologies: ${f.tools.join(', ')}` : '', cv && f.details?.url ? `Code: ${shortUrl(f.details.url)}` : ''].filter(Boolean).join(' | ') || undefined
       return { id: nid('p'), heading: f.title, subheading: tools, dates: dateRange(f.date_start, f.date_end), factIds: [f.fact_id],
-        bullets: bulletsOf(f).slice(0, i === 0 ? 4 : 3).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) }
+        bullets: bulletsOf(f).slice(0, cv ? 5 : i === 0 ? 3 : 2).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) }
     }),
   } : null
   chosenP.forEach(({ f, overlap }) => log.push({ kind: 'included', factId: f.fact_id, section: 'Projects', reason: overlap.length ? `Matches job keywords: ${overlap.join(', ')}` : 'No keyword overlap, included as general evidence' }))
@@ -144,8 +148,8 @@ export function buildResume(profile: Profile, allFacts: Fact[], spec: Pick<JobSp
     return { id, title, kind, items: fs.map((f) => ({ id: nid('x'), heading: f.title, subheading: f.organization ?? undefined, dates: dateRange(f.date_start, f.date_end), factIds: [f.fact_id],
       bullets: bulletsOf(f).slice(0, per).map((l) => ({ id: nid('b'), text: l, original: l, sourceFactIds: [f.fact_id] })) })) }
   }
-  const exp = mk('EXPERIENCE', 'experience', 'Experience', 'experience', 3, 4)
-  const lead = mk('LEADERSHIP', 'leadership', 'Leadership & Activities', 'leadership', 2, 2)
+  const exp = mk('EXPERIENCE', 'experience', 'Experience', 'experience', cv ? 5 : 2, cv ? 4 : 1)
+  const lead = mk('LEADERSHIP', 'leadership', 'Leadership & Activities', 'leadership', cv ? 6 : 2, cv ? 3 : 1)
   if (career === 'GRADUATE') { if (exp) sections.push(exp); if (projSection) sections.push(projSection) }
   else { if (projSection) sections.push(projSection); if (exp) sections.push(exp) }
   if (lead) sections.push(lead)

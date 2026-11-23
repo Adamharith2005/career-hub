@@ -12,6 +12,8 @@
     "build": "npm run build:main && npm run build:ui",
     "start": "npm run build && node scripts/start.mjs",
     "check": "npm run typecheck && npm test",
+    "import:profiles": "node scripts/run-debug.mjs scripts/import-profiles.ts",
+    "pack:demo": "node scripts/run-debug.mjs scripts/pack-demo.ts",
     "e2e": "node scripts/run-e2e.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "smoke:packaged": "node scripts/run-debug.mjs scripts/smoke-packaged.ts"

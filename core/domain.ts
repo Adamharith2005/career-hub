@@ -38,7 +38,7 @@ export const APP_STATUSES = [
 ] as const
 export type AppStatus = (typeof APP_STATUSES)[number]
 export const STATUS_LABEL: Record<AppStatus, string> = {
-  DISCOVERED: 'Discovered', SAVED: 'Saved', PREPARING: 'Preparing', READY_TO_APPLY: 'Ready to apply',
+  DISCOVERED: 'Discovered', SAVED: 'Saved', PREPARING: 'Preparing', READY_TO_APPLY: 'Prepared',
   APPLIED: 'Applied', SCREENING: 'Screening', ASSESSMENT: 'Assessment', INTERVIEW: 'Interview',
   OFFER: 'Offer', ACCEPTED: 'Accepted', REJECTED: 'Rejected', WITHDRAWN: 'Withdrawn', NOT_PURSUED: 'Not pursued',
 }
@@ -63,7 +63,7 @@ const TECH: Record<string, string[]> = {
   TensorFlow: ['tensorflow'], PyTorch: ['pytorch'], 'Scikit-learn': ['scikit-learn', 'sklearn', 'scikit learn'], Pandas: ['pandas'], NumPy: ['numpy'],
   Keras: ['keras'], OpenCV: ['opencv'], MediaPipe: ['mediapipe'], 'Hugging Face': ['hugging face', 'huggingface'], LangChain: ['langchain'], RAG: ['rag'],
   LLM: ['llm', 'llms'], NLP: ['nlp'], 'Machine Learning': ['machine learning'], 'Deep Learning': ['deep learning'], 'Computer Vision': ['computer vision'],
-  'Power BI': ['power bi', 'powerbi'], Tableau: ['tableau'], Excel: ['excel'], ETL: ['etl'], Spark: ['spark', 'pyspark'], Hadoop: ['hadoop'], Airflow: ['airflow'],
+  'Power BI': ['power bi', 'powerbi'], Tableau: ['tableau'], Excel: ['excel'], ETL: ['etl'], Spark: ['spark', 'pyspark'], Hadoop: ['hadoop'], 'Apache Hive': ['hive', 'hiveql'], Matplotlib: ['matplotlib'], Seaborn: ['seaborn'], DAX: ['dax'], Airflow: ['airflow'],
   Wireshark: ['wireshark'], Nmap: ['nmap'], 'Burp Suite': ['burp suite', 'burp'], Metasploit: ['metasploit'], 'OWASP Top 10': ['owasp'], SIEM: ['siem'], Splunk: ['splunk'],
   Nessus: ['nessus'], Snort: ['snort'], 'Kali Linux': ['kali', 'kali linux'], 'Penetration Testing': ['penetration testing', 'pentest', 'pentesting'],
   'Digital Forensics': ['digital forensics', 'forensics'], IAM: ['iam'], 'Active Directory': ['active directory'], Cryptography: ['cryptography'],

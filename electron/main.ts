@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, session } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell, session } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { openDb } from '../core/db.ts'
@@ -55,10 +55,15 @@ function setup() {
       openPath: async (p) => { if (E2E) { e2eLog('openPath', p); return '' } return shell.openPath(p) },
       showItem: (p) => { if (E2E) e2eLog('showItem', p); else shell.showItemInFolder(p) },
       openExternal: (u) => { if (!/^https?:\/\//i.test(u)) return; if (E2E) e2eLog('openExternal', u); else void shell.openExternal(u) },
-      documentsPath: () => app.getPath('documents'),
+      documentsPath: () => process.env.CAREER_HUB_DOCUMENTS || app.getPath('documents'),
+      downloadsPath: () => process.env.CAREER_HUB_DOWNLOADS || app.getPath('downloads'),
+      copyText: (t) => { clipboard.writeText(t); e2eLog('clipboard', JSON.stringify(t.slice(0, 400))) },
     },
   })
-  void api.helpers.ensureSeed()
+  // First run (or a new machine): import the private two-profile payload if one is present. Idempotent; the database is backed up first.
+  void api.helpers.ensureSeed().then(async () => {
+    try { const st = await api.call('import.status'); if (st.pending) { const r = await api.call('import.run'); console.log('Profile import:', JSON.stringify(r.report.profiles.map((p: any) => ({ key: p.key, created: p.created, adopted: p.adopted, added: p.added })))) } } catch (e: any) { console.warn('Profile import skipped:', e?.message) }
+  })
 
   ipcMain.handle('api', async (e, name: string, args: unknown) => {
     // Only our own window may call the API.

@@ -4,7 +4,7 @@ export type Page = 'home' | 'applications' | 'companies' | 'profile' | 'settings
 export interface NewAppOpts { tab?: 'paste' | 'url' | 'company'; companyId?: string }
 export interface PrepareOpts { companyId: string; focusRoles?: string[] }
 export interface Boot {
-  profiles: { profile_id: string; name: string; onboarding_done: boolean }[]
+  profiles: { profile_id: string; name: string; onboarding_done: boolean; stable_key: string | null; tagline: string; badge: string; applyPlan: string }[]
   activeProfileId: string | null
   profile: any | null
   techNames: string[]

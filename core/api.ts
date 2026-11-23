@@ -15,6 +15,11 @@ import { renderResumePdf, renderLetterPdf, renderResumeDocx, renderLetterDocx, q
 import { buildEmail, buildEml, lintEmail, setAttachmentLine, EMAIL_KIND_LABEL, type EmailKind } from './email.ts'
 import { aiAnalyzeJob, aiWriteLetter, aiWriteEmailBody, AiError, describeProvider, DEFAULT_MODELS, type AiConfig } from './ai.ts'
 import { fetchJobPage, FetchBlocked } from './fetchjob.ts'
+import * as K from './pack.ts'
+import { makeZip } from './zip.ts'
+import { importPayload, loadPayloadFile, payloadCandidates } from './twoprofile.ts'
+import { factFamilies } from './target.ts'
+import os from 'node:os'
 import { applicationDir, checkFile, ensureDir, profileDir, sha256, sha256File, writeFileAtomic, writeNewFile, assertInside } from './storage.ts'
 import { ROLE_FAMILIES, TECH_NAMES, roleLabel, slugify, safeParse, STATUS_LABEL, APP_STATUSES, type AppStatus } from './domain.ts'
 
@@ -30,6 +35,8 @@ export interface Env {
     showItem(p: string): void
     openExternal(u: string): void
     documentsPath(): string
+    downloadsPath?(): string
+    copyText?(text: string): void
   }
   fetchImpl?: typeof fetch
   now?: () => Date
@@ -98,13 +105,14 @@ export function createApi(env: Env) {
   }
   const vv = (n: number) => String(n).padStart(2, '0')
 
-  async function exportDoc(app: any, type: 'RESUME' | 'COVER_LETTER', ast: ResumeAST | LetterAST, changelog: ChangeLogEntry[], factCheck: unknown) {
+  async function exportDoc(app: any, type: 'RESUME' | 'COVER_LETTER' | 'CV', ast: ResumeAST | LetterAST, changelog: ChangeLogEntry[], factCheck: unknown) {
     const p = profile(); const r = root(p)
     const dir = ensureDir(r, applicationDir(r, p, app))
     const v = nextVersion(p.profile_id, app.application_id, type)
-    const base = `${type === 'RESUME' ? 'Resume' : 'CoverLetter'}_${slugify(p.identity.fullName || p.name, 24)}_${slugify(app.company_name, 24)}_v${vv(v)}`
-    const isR = type === 'RESUME'
-    const pdf = isR ? await renderResumePdf(ast as ResumeAST, { targetPages: app.career_type === 'INTERNSHIP' ? 1 : 2 }) : await renderLetterPdf(ast as LetterAST)
+    const base = `${type === 'RESUME' ? 'Resume' : type === 'CV' ? 'CV' : 'CoverLetter'}_${slugify(p.identity.fullName || p.name, 24)}_${slugify(app.company_name, 24)}_v${vv(v)}`
+    const isR = type !== 'COVER_LETTER'
+    const maxPages = type === 'CV' ? 2 : app.career_type === 'INTERNSHIP' ? 1 : 2
+    const pdf = isR ? await renderResumePdf(ast as ResumeAST, { targetPages: maxPages }) : await renderLetterPdf(ast as LetterAST)
     const docx = isR ? await renderResumeDocx(ast as ResumeAST) : await renderLetterDocx(ast as LetterAST)
     const pdfF = writeNewFile(r, path.join(dir, `${base}.pdf`), pdf.buffer)
     const docxF = writeNewFile(r, path.join(dir, `${base}.docx`), docx)
@@ -113,7 +121,7 @@ export function createApi(env: Env) {
     const own = facts.map((f) => `${f.title} ${f.organization ?? ''} ${f.claim_text}`).join(' ')
     if (isR) {
       const a = ast as ResumeAST
-      qa = await qaExport({ kind: 'resume', pdf: pdf.buffer, docx, pages: pdf.pages, fontSize: pdf.fontSize, maxPages: app.career_type === 'INTERNSHIP' ? 1 : 2, name: a.header.name, email: p.identity.email,
+      qa = await qaExport({ kind: 'resume', pdf: pdf.buffer, docx, pages: pdf.pages, fontSize: pdf.fontSize, maxPages, name: a.header.name, email: p.identity.email,
         headings: a.sections.map((s) => s.title), expectedLinks: a.header.contacts.filter((c) => c.url && !c.url.startsWith('mailto:')).map((c) => c.url!),
         fingerprints: a.sections.flatMap((s) => (s.items ?? []).flatMap((i) => i.bullets.map((b) => b.text)).concat((s.skillGroups ?? []).map((g) => g.values[0]))), targetCompany: app.company_name, allCompanyNames: C.allCompanyNames(db, p.profile_id), ownText: own })
     } else {
@@ -144,11 +152,32 @@ export function createApi(env: Env) {
     return dir
   }
 
+  /** Everything the single pack screen shows, read from saved state (never recomputed). */
+  async function packView(appId: string) {
+    const p = profile(); const app: any = A.getApp(db, p.profile_id, appId)
+    const co: any = app.company_id ? C.getCompany(db, p.profile_id, app.company_id) : null
+    const docs = listDocs(p.profile_id, appId)
+    const latest = (t: string) => docs.find((d: any) => d.doc_type === t) ?? null
+    const em = get<any>(db, `SELECT * FROM emails WHERE application_id=? AND profile_id=? AND kind IN ('APPLY','SPECULATIVE') ORDER BY version_number DESC, created_at DESC LIMIT 1`, appId, p.profile_id)
+    const snap = safeParse<any>(app.pack_json, null)
+    const slim = (d: any) => d && { doc_id: d.doc_id, version: d.version_number, pages: d.qa?.pages ?? null, qaPassed: !!d.qa_passed, qa: d.qa, pdfState: d.pdfState, pdf_path: d.pdf_path, size: d.pdf_size, sha256: d.pdf_sha256, created_at: d.created_at }
+    return {
+      app: { application_id: app.application_id, company_name: app.company_name, role_title: app.role_title, role_family: app.role_family, mode: app.mode, status: app.status, statusLabel: STATUS_LABEL[app.status as AppStatus] ?? app.status },
+      profile: { profile_id: p.profile_id, name: p.name, fullName: p.identity.fullName || p.name },
+      company: co && { company_id: co.company_id, name: co.name, status_enum: co.status_enum, last_verified: co.last_verified, careers_page: co.careers_page, website: co.website },
+      docs: { resume: slim(latest('RESUME')), cv: slim(latest('CV')) },
+      email: em && { email_id: em.email_id, to: em.to_addr, subject: em.subject, body: em.body, edited: !!em.edited, version: em.version_number, route: snap?.route ?? null, words: K.bodyWords(em.body) },
+      recipient: snap?.recipient ?? (co ? K.recipientFor(co, app.role_title, { resumeName: 'resume.pdf', cvName: 'cv.pdf' }) : null),
+      alignment: snap?.alignment ?? null, needs: snap?.needs ?? [], lint: snap?.lint ?? [], notes: snap?.notes ?? [], preparedAt: snap?.preparedAt ?? null,
+      version: Math.max(latest('RESUME')?.version_number ?? 0, latest('CV')?.version_number ?? 0),
+    }
+  }
+
   // ---------------------------------------------------------------- handlers
   const h = {
     // ---- boot / profiles
     'boot': async () => {
-      const profiles = P.listProfiles(db).map((x) => ({ profile_id: x.profile_id, name: x.name, onboarding_done: !!x.onboarding_done }))
+      const profiles = P.listProfiles(db).map((x) => ({ profile_id: x.profile_id, name: x.name, onboarding_done: !!x.onboarding_done, stable_key: (x as any).stable_key ?? null, tagline: x.prefs.tagline ?? '', badge: x.prefs.badge ?? '', applyPlan: x.prefs.applyPlan ?? '' }))
       const aid = P.getActiveProfileId(db); const active = aid
       return { techNames: TECH_NAMES, profiles, activeProfileId: aid, profile: aid ? P.getProfile(db, aid) : null, roleFamilies: ROLE_FAMILIES, statuses: APP_STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s] })), companyCount: get<any>(db, 'SELECT COUNT(*) n FROM companies WHERE profile_id IS NULL')!.n, secureKeyStorage: env.secrets.available(), defaultFolder: path.join(env.ui.documentsPath(), 'Career Hub'), dataDir: env.userDataDir, followupDays: Number(active ? P.getSetting(db, active, 'followup.days', '7') : 7) || 7 }
     },
@@ -484,6 +513,128 @@ export function createApi(env: Env) {
         if (issues.some((i) => i.severity === 'error')) throw new ApiError(`The AI version was rejected by the fact check: ${issues[0].message}`, 'FACT_CHECK')
         return body
       } catch (e: any) { if (e instanceof AiError) throw new ApiError(e.message, e.code); throw e }
+    },
+
+    // ---- two-profile picker, one-time private import, clipboard
+    'import.status': async () => {
+      const file = payloadCandidates(env.userDataDir).find((f) => fs.existsSync(f)) ?? null
+      let pending = false
+      if (file) { try { const keys = new Set(all<any>(db, 'SELECT stable_key k FROM profiles WHERE stable_key IS NOT NULL').map((r) => r.k)); pending = loadPayloadFile(file).payload.profiles.some((x) => !keys.has(x.key)) } catch { pending = false } }
+      return { found: !!file, file, pending, expected: path.join(env.userDataDir, 'import', 'profiles.payload.json'), profileCount: P.listProfiles(db).length }
+    },
+    'import.run': async (a?: { path?: string }) => {
+      const file = a?.path ?? payloadCandidates(env.userDataDir).find((f) => fs.existsSync(f))
+      if (!file) throw new ApiError(`No profile file found. Place profiles.payload.json in ${path.join(env.userDataDir, 'import')} (see README, "Private profile import").`, 'NO_PAYLOAD')
+      const dir = path.join(env.userDataDir, 'backups'); fs.mkdirSync(dir, { recursive: true })
+      const backup = path.join(dir, `pre-import-${now().toISOString().replace(/[:T]/g, '-').slice(0, 19)}.db`)
+      db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`)
+      const { payload, dir: pdir } = loadPayloadFile(file)
+      const report = importPayload(db, payload, {
+        payloadDir: pdir, defaultStorageRoot: path.join(env.ui.documentsPath(), 'Career Hub'),
+        originalsDir: (pid, name) => path.join(env.userDataDir, 'profiles', `${slugify(P.getProfile(db, pid)!.name, 30)}__${pid}`, 'originals', name),
+      })
+      return { report, backup }
+    },
+    'clipboard.copy': async (a: { text: string }) => {
+      if (typeof a?.text !== 'string' || a.text.length > 200_000) throw new ApiError('Nothing to copy.')
+      if (!env.ui.copyText) throw new ApiError('Clipboard is not available here.', 'NO_CLIPBOARD')
+      env.ui.copyText(a.text); return true
+    },
+
+    // ---- application pack: company + role -> email, subject, wording, resume.pdf, cv.pdf (drafts only; nothing is sent)
+    'pack.prepare': async (a: { companyId: string; roleFamily: string; title: string; jobText?: string; appId?: string; resetEmail?: boolean }) => {
+      let p = profile(); const pid = p.profile_id
+      const co: any = C.getCompany(db, pid, a.companyId)
+      if (!co) throw new ApiError('Company not found.', 'NO_COMPANY')
+      const title = (a.title ?? '').trim()
+      if (!title) throw new ApiError('Choose a target role, or paste the job post, first.', 'NO_ROLE')
+      const facts = P.listFacts(db, pid, true)
+      if (!facts.length) throw new ApiError('This profile has no confirmed facts yet. Import the profile or confirm facts in My Profile.', 'NO_FACTS')
+      if (!p.storage_root) { const dflt = path.join(env.ui.documentsPath(), 'Career Hub'); fs.mkdirSync(dflt, { recursive: true }); p = P.updateProfile(db, pid, { storage_root: dflt }) as any }
+      const jobText = (a.jobText ?? '').trim(); const hasAd = jobText.length >= 40
+      if (jobText && !hasAd) throw new ApiError('The pasted job post is too short to assess. Paste the full text, or clear it to use the company/role estimate.', 'TOO_SHORT')
+      const family = a.roleFamily || 'swe'
+
+      let appId = a.appId ?? get<any>(db, `SELECT application_id id FROM applications WHERE profile_id=? AND company_id=? AND role_title=? AND job_text=? AND applied_at IS NULL AND status IN ('SAVED','PREPARING','READY_TO_APPLY') ORDER BY created_at DESC LIMIT 1`, pid, co.company_id, title, jobText)?.id
+      if (!appId) appId = await h['app.create']({ companyId: co.company_id, company: co.name, title, roleFamily: family, careerType: 'INTERNSHIP', mode: hasAd ? 'ADVERTISED_VACANCY' : 'SPECULATIVE_OUTREACH', jobText: hasAd ? jobText : undefined, source: hasAd ? 'Pasted job post' : 'Cyberjaya directory (speculative enquiry)' })
+      let app: any = A.getApp(db, pid, appId!)
+      if (['APPLIED', 'SCREENING', 'ASSESSMENT', 'INTERVIEW', 'OFFER', 'ACCEPTED'].includes(app.status)) throw new ApiError('This application is already marked as applied. Start a new pack for a different role instead.', 'ALREADY_APPLIED')
+
+      const t = tailoring(app)
+      const spec = { ...t.spec, title: app.role_title, company: app.company_name }
+      const base = { language: 'en' as const, careerType: 'INTERNSHIP' as const }
+      // Resume: one A4 page. Drop the weakest project only if needed to fit.
+      let rAst = buildResume(p as any, facts, spec, { ...base, detail: 'resume' })
+      for (const mp of [3, 2, 1]) {
+        rAst = buildResume(p as any, facts, spec, { ...base, detail: 'resume', maxProjects: mp })
+        if ((await renderResumePdf(rAst, { targetPages: 1 })).pages <= 1) break
+      }
+      const cAst = buildResume(p as any, facts, spec, { ...base, detail: 'cv' })
+      const preAst = buildResume(p as any, facts, { required: [], preferred: [], roleFamily: 'other', title: app.role_title, company: app.company_name }, { ...base, detail: 'resume', maxProjects: rAst.sections.find((s) => s.kind === 'projects')?.items?.length ?? 3 })
+      const fr = factCheckResume(rAst, facts), fc = factCheckResume(cAst, facts)
+      if (!fr.passed || !fc.passed) return { ok: false as const, issues: [...fr.issues, ...fc.issues] }
+      writeSupportFiles(app, spec)
+      const resume = await exportDoc(app, 'RESUME', rAst, rAst.changelog, fr)
+      const cv = await exportDoc(app, 'CV', cAst, cAst.changelog, fc)
+
+      // Email draft. A draft the user has edited is kept unless they ask for a reset.
+      const rec = K.recipientFor(co, app.role_title, { resumeName: 'resume.pdf', cvName: 'cv.pdf' })
+      const route = K.routeFor(co.status_enum, hasAd, rec)
+      const wanted = new Set<string>([...t.spec.required, ...t.spec.preferred, ...(t.co ? companyContext(t.co as any, family).wantedTech : [])])
+      const draft = K.buildPackEmail({ profile: p as any, facts, company: co.name, industry: co.industry, role: app.role_title, roleFamily: family, route, wanted, spec: hasAd ? t.spec : null, famOf: factFamilies })
+      const prev = get<any>(db, `SELECT * FROM emails WHERE application_id=? AND profile_id=? AND kind IN ('APPLY','SPECULATIVE') ORDER BY version_number DESC, created_at DESC LIMIT 1`, appId, pid)
+      const atts = JSON.stringify([{ name: 'resume.pdf', path: resume.pdf.path }, { name: 'cv.pdf', path: cv.pdf.path }])
+      if (prev && prev.edited && !a.resetEmail) run(db, 'UPDATE emails SET attachments_json=?, to_addr=? WHERE email_id=?', atts, rec.address ?? '', prev.email_id)
+      else run(db, `INSERT INTO emails (email_id, profile_id, application_id, kind, language, to_addr, subject, body, attachments_json, version_number, created_at, edited) VALUES (?,?,?,?,?,?,?,?,?,?,?,0)`,
+        id('em'), pid, appId, route === 'VACANCY' ? 'APPLY' : 'SPECULATIVE', 'en', rec.address ?? '', draft.subject, draft.body, atts, (prev?.version_number ?? 0) + 1, nowIso())
+
+      const alignment = K.alignmentFor({ profile: p as any, facts, company: co, roleFamily: family, spec: hasAd ? t.spec : null, jobText, preAst, postAst: rAst, qualityOk: resume.qa.passed && cv.qa.passed, careerType: 'INTERNSHIP', now: now(), staleDays: co.age_days ?? null })
+      const used = new Set<string>([...K.factIdsIn(rAst), ...K.factIdsIn(cAst)])
+      const needs = facts.filter((f) => used.has(f.fact_id) && (f.status === 'NEEDS_CONFIRMATION' || f.maturity === 'proposal' || /to be confirmed|need(s)? confirmation|confirm/i.test(`${f.source_ref ?? ''} ${f.claim_text}`)))
+        .map((f) => ({ factId: f.fact_id, title: f.title, why: f.maturity === 'proposal' ? 'Proposed / in progress: described as planned work, never as finished results.' : f.status === 'USER_REPORTED' ? 'Reported by you: details still to be confirmed.' : 'Check this against your own records before sending.' }))
+      const lint = lintEmail({ to: rec.address ?? '', subject: draft.subject, body: draft.body, profile: p as any, company: co.name, allCompanyNames: C.allCompanyNames(db, pid), attachments: [{ name: 'resume.pdf', exists: fs.existsSync(resume.pdf.path) }, { name: 'cv.pdf', exists: fs.existsSync(cv.pdf.path) }], companyWebsite: co.website, ownText: facts.map((f) => `${f.title} ${f.organization ?? ''} ${f.claim_text}`).join(' ') })
+      run(db, 'UPDATE applications SET pack_json=?, contact_email=?, updated_at=? WHERE application_id=?', JSON.stringify({ alignment, recipient: rec, route, needs, lint, notes: draft.notes, preparedAt: nowIso(), changelog: rAst.changelog.slice(0, 40) }), rec.address ?? null, nowIso(), appId)
+      if (['SAVED', 'DISCOVERED'].includes(app.status)) A.setStatus(db, pid, appId!, 'PREPARING')
+      A.addEvent(db, pid, appId!, 'PACK', `Prepared pack: resume v${vv(resume.version)}, CV v${vv(cv.version)}, email draft. Nothing was sent.`)
+      app = A.getApp(db, pid, appId!)
+      if (resume.qa.passed && cv.qa.passed && !app.applied_at && ['PREPARING', 'SAVED'].includes(app.status)) A.setStatus(db, pid, appId!, 'READY_TO_APPLY', 'Pack prepared; all document checks passed')
+      return { ok: true as const, ...(await packView(appId!)) }
+    },
+    'pack.get': async (a: { appId: string }) => packView(a.appId),
+    'pack.forCompany': async (a: { companyId: string }) => {
+      const r = get<any>(db, `SELECT application_id id FROM applications WHERE profile_id=? AND company_id=? AND pack_json IS NOT NULL ORDER BY updated_at DESC LIMIT 1`, activeId(), a.companyId)
+      return r ? packView(r.id) : null
+    },
+    'pack.saveEmail': async (a: { appId: string; subject: string; body: string }) => {
+      const pid = activeId(); const e = get<any>(db, `SELECT * FROM emails WHERE application_id=? AND profile_id=? AND kind IN ('APPLY','SPECULATIVE') ORDER BY version_number DESC, created_at DESC LIMIT 1`, a.appId, pid)
+      if (!e) throw new ApiError('No email draft for this application yet.')
+      if (!a.subject.trim() || !a.body.trim()) throw new ApiError('The subject and message cannot be empty.')
+      run(db, 'UPDATE emails SET subject=?, body=?, edited=1 WHERE email_id=?', a.subject.trim(), a.body, e.email_id)
+      return true
+    },
+    'pack.export': async (a: { appId: string; which: 'resume' | 'cv' | 'zip' }) => {
+      const pid = activeId(); const v = await packView(a.appId)
+      const names = { resume: 'resume.pdf', cv: 'cv.pdf' } as const
+      const dl = (env.ui.downloadsPath?.() ?? path.join(os.homedir(), 'Downloads'))
+      const ver = Math.max(v.docs.resume?.version ?? 0, v.docs.cv?.version ?? 0)
+      const dest = path.join(dl, 'Career Hub', `${slugify(v.app.company_name, 28)}__${slugify(v.app.role_title, 28)}__${slugify(P.getProfile(db, pid)!.name, 12)}_v${vv(ver)}`)
+      const read = (d: any) => { if (!d || d.pdfState !== 'ok') throw new ApiError('A PDF is missing or changed on disk. Regenerate the pack to recreate it.', 'FILE_MISSING'); return fs.readFileSync(d.pdf_path) }
+      fs.mkdirSync(dest, { recursive: true })
+      const out: Record<string, Buffer> = {}
+      if (a.which !== 'cv') out['resume.pdf'] = read(listDocs(pid, a.appId).find((d: any) => d.doc_type === 'RESUME'))
+      if (a.which !== 'resume') out['cv.pdf'] = read(listDocs(pid, a.appId).find((d: any) => d.doc_type === 'CV'))
+      let target: string
+      if (a.which === 'zip') {
+        const notes = ['Career Hub application pack (DRAFT: nothing has been sent)', `Applicant: ${v.profile.fullName}`, `Company: ${v.app.company_name}`, `Role: ${v.app.role_title}`, `Pack version: v${vv(ver)}`, 'Status: Prepared (not applied)', '',
+          `To: ${v.email?.to || `No verified public email. ${v.recipient?.instructions ?? ''}`}`, `Subject: ${v.email?.subject ?? ''}`, '', v.email?.body ?? '', '', 'Attach resume.pdf and cv.pdf yourself when you send. Career Hub does not send or attach anything.'].join('\n')
+        target = path.join(dest, 'application-pack.zip')
+        fs.writeFileSync(target, makeZip([{ name: 'resume.pdf', data: out['resume.pdf'] }, { name: 'cv.pdf', data: out['cv.pdf'] }, { name: 'application-notes.txt', data: Buffer.from(notes, 'utf8') }]))
+      } else {
+        const n = names[a.which]; target = path.join(dest, n); fs.writeFileSync(target, out[n])
+        if (sha256(fs.readFileSync(target)) !== sha256(out[n])) throw new ApiError('The saved copy did not match the original. Try again.', 'COPY_MISMATCH')
+      }
+      env.ui.showItem(target)
+      return { path: target, bytes: fs.statSync(target).size }
     },
 
     // ---- backup

@@ -166,6 +166,48 @@ export const MIGRATIONS: string[] = [
   -- Setup wizard changed from 3 to 4 steps; unfinished wizards restart at step 1 (their data is kept).
   UPDATE profiles SET onboarding_step = 1 WHERE onboarding_done = 0;
   `,
+  `
+  -- V3: provenance, stable profile keys, audit log, and a CV document type. Additive except the document_versions rebuild (rows copied 1:1).
+  ALTER TABLE applications ADD COLUMN pack_json TEXT;                        -- snapshot of the last prepared application pack (alignment, recipient, warnings)
+  ALTER TABLE emails ADD COLUMN edited INTEGER NOT NULL DEFAULT 0;           -- 1 = the user edited this draft; regenerating documents keeps their wording
+  ALTER TABLE profiles ADD COLUMN stable_key TEXT;                          -- 'adam' / 'akif': a re-import finds the same profile instead of duplicating it
+  CREATE UNIQUE INDEX idx_profiles_stable ON profiles(stable_key) WHERE stable_key IS NOT NULL;
+  ALTER TABLE facts ADD COLUMN status TEXT NOT NULL DEFAULT 'USER_REPORTED';  -- DOCUMENTED | USER_REPORTED | IN_PROGRESS | NEEDS_CONFIRMATION | REPO_OBSERVED
+  ALTER TABLE facts ADD COLUMN source_ref TEXT;                              -- source filename / URL
+  ALTER TABLE facts ADD COLUMN verified_on TEXT;
+  ALTER TABLE facts ADD COLUMN user_override INTEGER NOT NULL DEFAULT 0;     -- 1 = the user edited it; a re-import never overwrites it
+  ALTER TABLE facts ADD COLUMN maturity TEXT;                                -- coursework | proposal | prototype | deployed | idea ...
+  ALTER TABLE facts ADD COLUMN import_key TEXT;
+  CREATE UNIQUE INDEX idx_facts_import ON facts(profile_id, import_key) WHERE import_key IS NOT NULL;
+  CREATE TABLE fact_log (
+    log_id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    fact_key TEXT NOT NULL,
+    action TEXT NOT NULL,            -- IMPORT_ADD | IMPORT_UPDATE | IMPORT_SKIP_USER_EDIT | USER_EDIT
+    summary TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_factlog_profile ON fact_log(profile_id);
+  CREATE TABLE document_versions_v3 (
+    doc_id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    application_id TEXT NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
+    doc_type TEXT NOT NULL CHECK (doc_type IN ('RESUME','COVER_LETTER','CV')),
+    version_number INTEGER NOT NULL,
+    ast_json TEXT NOT NULL,
+    changelog_json TEXT NOT NULL DEFAULT '[]',
+    qa_passed INTEGER NOT NULL DEFAULT 0,
+    qa_report_json TEXT,
+    fact_check_json TEXT,
+    pdf_path TEXT, pdf_sha256 TEXT, pdf_size INTEGER,
+    docx_path TEXT, docx_sha256 TEXT, docx_size INTEGER,
+    is_submitted_version INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  INSERT INTO document_versions_v3 SELECT doc_id, profile_id, application_id, doc_type, version_number, ast_json, changelog_json, qa_passed, qa_report_json, fact_check_json, pdf_path, pdf_sha256, pdf_size, docx_path, docx_sha256, docx_size, is_submitted_version, created_at FROM document_versions;
+  DROP TABLE document_versions;
+  ALTER TABLE document_versions_v3 RENAME TO document_versions;
+  `,
 ]
 
 export function migrate(db: DB) {

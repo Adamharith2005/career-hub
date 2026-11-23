@@ -244,7 +244,7 @@ describe('V2-E. Company target fit (explainable, per profile, confidence-aware)'
     const cs = data.find((c) => c.company_id === cid('CyberSecurity Malaysia'))
     expect(cs.fit.roleAlignment).toBe('Low'); expect(cs.fit.components.find((x: any) => x.key === 'role').value).toBeLessThan(0.6)
   })
-  it('never shows 100; the ceiling follows evidence confidence (HIGH 95 / MEDIUM 90 / LOW 75)', async () => {
+  it('never shows 100; the ceiling follows evidence confidence (HIGH 85 / MEDIUM 85 / LOW 75)', async () => {
     const t = await mk(); const { h } = t.api
     await structured(t, 'bee')
     const list = (await h['companies.list']({})) as any[]

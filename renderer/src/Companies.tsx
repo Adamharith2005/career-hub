@@ -243,7 +243,7 @@ function CompanyDetail({ c, focusRoles, onStar, onPrepare, bare }: { c: any; foc
 
         {/* fit */}
         <section aria-labelledby="fit-h" className="card-soft p-4">
-          <h3 id="fit-h" className="eyebrow mb-3">Target fit — how well this employer matches you</h3>
+          <h3 id="fit-h" className="eyebrow mb-3">Company/role alignment estimate — how well this employer matches you</h3>
           {fit.status === 'scored' ? (
             <>
               <div className="flex items-center gap-4">
