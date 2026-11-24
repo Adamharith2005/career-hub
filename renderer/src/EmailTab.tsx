@@ -76,7 +76,7 @@ export function EmailTab({ detail, reload, initialKind }: { detail: any; reload:
 
         <div>
           <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium"><Paperclip size={14} aria-hidden />Attachments <span className="font-normal text-muted">— real files from this application’s folder</span></p>
-          {noDocs && <Banner tone="warn">Generate documents first (Documents tab) so there are files to attach.</Banner>}
+          {noDocs && <Banner tone="warn">Generate documents first (CV Studio tab) so there are files to attach.</Banner>}
           <ul className="flex flex-wrap gap-2" aria-label="Attachments">
             {atts.map((a) => (
               <li key={a.key}><button type="button" role="checkbox" aria-checked={a.checked} disabled={!a.exists} onClick={() => toggle(a.key)} title={a.path}
@@ -85,7 +85,7 @@ export function EmailTab({ detail, reload, initialKind }: { detail: any; reload:
                 <FileText size={15} className="shrink-0 text-muted" aria-hidden /><span className="min-w-0"><span className="block truncate font-medium">{a.name}</span><span className="block text-xs text-muted">{a.label} · {a.exists ? fmtSize(a.size) : <span className="text-bad">missing on disk</span>}</span></span></button></li>
             ))}
           </ul>
-          <p className="mt-1.5 text-xs text-muted">Your tailored resume is attached by default. A separate master CV or supporting letter is listed only if you uploaded one — choose it deliberately; transcripts contain personal data.</p>
+          <p className="mt-1.5 text-xs text-muted">The resume you attached to this application is selected by default; a tailored CV is selected only once you approve it in CV Studio. A separate master CV or supporting letter is listed only if you uploaded one — choose it deliberately; transcripts contain personal data.</p>
         </div>
       </div>
 

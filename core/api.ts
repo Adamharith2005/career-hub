@@ -3,6 +3,9 @@ import path from 'node:path'
 import { DB, all, get, run, id, nowIso } from './db.ts'
 import * as P from './profiles.ts'
 import * as C from './companies.ts'
+import * as R from './research-import.ts'
+import * as AL from './allowance.ts'
+import { compare as compareCompanies, type Priority } from './compare.ts'
 import * as A from './applications.ts'
 import { importCv, listSourceDocs } from './cv.ts'
 import { parseJobText, compensationFor, type JobSpec } from './job.ts'
@@ -15,6 +18,7 @@ import { renderResumePdf, renderLetterPdf, renderResumeDocx, renderLetterDocx, q
 import { buildEmail, buildEml, lintEmail, setAttachmentLine, EMAIL_KIND_LABEL, type EmailKind } from './email.ts'
 import { aiAnalyzeJob, aiWriteLetter, aiWriteEmailBody, AiError, describeProvider, DEFAULT_MODELS, type AiConfig } from './ai.ts'
 import { fetchJobPage, FetchBlocked } from './fetchjob.ts'
+import * as RS from './resumes.ts'
 import { applicationDir, checkFile, ensureDir, profileDir, sha256, sha256File, writeFileAtomic, writeNewFile, assertInside } from './storage.ts'
 import { ROLE_FAMILIES, TECH_NAMES, roleLabel, slugify, safeParse, STATUS_LABEL, APP_STATUSES, type AppStatus } from './domain.ts'
 
@@ -25,7 +29,7 @@ export interface Env {
   secrets: { get(profileId: string): string | null; set(profileId: string, value: string | null): void; available(): boolean }
   ui: {
     pickFolder(): Promise<string | null>
-    pickFile(kind: 'cv' | 'company' | 'evidence'): Promise<string | null>
+    pickFile(kind: 'cv' | 'company' | 'evidence' | 'resume'): Promise<string | null>
     openPath(p: string): Promise<string>
     showItem(p: string): void
     openExternal(u: string): void
@@ -41,6 +45,7 @@ export class ApiError extends Error {
 
 export function createApi(env: Env) {
   const { db } = env
+  AL.ensurePolicies(db)
   const now = () => env.now?.() ?? new Date()
   const fetchImpl = () => env.fetchImpl ?? fetch
 
@@ -145,6 +150,7 @@ export function createApi(env: Env) {
   }
 
   // ---------------------------------------------------------------- handlers
+  const rsGuard = <T,>(fn: () => T): T => { try { return fn() } catch (e) { if (e instanceof RS.ResumeError) throw new ApiError(e.message, e.code); throw e } }
   const h = {
     // ---- boot / profiles
     'boot': async () => {
@@ -253,11 +259,30 @@ export function createApi(env: Env) {
       const p = profile(); const c = C.getCompany(db, p.profile_id, a.id); if (!c) return null
       return { ...c, fit: targetFit({ profile: p, facts: P.listFacts(db, p.profile_id), company: c as any, focusRoles: a.focusRoles, now: now() }) }
     },
+    'companies.compare': async (a: { ids: string[]; priority?: Priority }) => {
+      const pid = activeId()
+      const all_ = C.listCompanies(db, pid, { includeOutside: true })
+      const picked = a.ids.map((i) => all_.find((c) => c.company_id === i)).filter(Boolean) as any[]
+      if (picked.length !== a.ids.length) throw new ApiError('One of the selected companies no longer exists.')
+      const result = compareCompanies(picked, a.priority ?? 'balanced', now())
+      return { ...result, companies: picked.map((c) => ({ ...c, allowance: AL.allowanceFor(db, c.company_id, now()) })) }
+    },
     'companies.shortlist': async (a: { id: string; on: boolean }) => { C.setShortlist(db, activeId(), a.id, a.on); return true },
     'companies.add': async (a: any) => C.addUserCompany(db, activeId(), a),
     'companies.note': async (a: { id: string; note: string }) => { C.setCompanyNote(db, activeId(), a.id, a.note); return true },
     'companies.importPick': async () => { const f = await env.ui.pickFile('company'); return f ? C.importCompanyFile(db, f) : null },
     'companies.import': async (a: { path: string }) => C.importCompanyFile(db, a.path),
+    // ---- research import centre (shared company research; never touches personal data)
+    'research.pick': async () => { const f = await env.ui.pickFile('company'); return f ? { path: f, ...(await R.previewWorkbookFile(db, f)) } : null },
+    'research.preview': async (a: { path: string }) => ({ path: a.path, ...(await R.previewWorkbookFile(db, a.path)) }),
+    'research.import': async (a: { path: string }) => R.importWorkbookFile(db, a.path),
+    'research.history': async () => all(db, `SELECT b.batch_id, b.filename, b.created_at, b.summary_json, (SELECT COUNT(*) FROM import_rows r WHERE r.batch_id = b.batch_id) AS rows FROM import_batches b ORDER BY b.created_at DESC LIMIT 50`).map((b: any) => ({ ...b, summary: safeParse(b.summary_json, {}) })),
+    'research.conflicts': async () => all(db, `SELECT r.row_id, r.company_id, c.name, r.diff_json, b.filename FROM import_rows r JOIN import_batches b USING (batch_id) LEFT JOIN companies c USING (company_id) WHERE r.outcome = 'CONFLICT' ORDER BY b.created_at DESC LIMIT 200`).map((x: any) => ({ ...x, diff: safeParse(x.diff_json, {}) })),
+    // ---- allowance
+    'allowance.policy': async () => ({ policy: AL.JPA_POLICY, gradeLabels: AL.GRADE_LABEL }),
+    'allowance.illustrate': async (a: { paidDays: number }) => AL.illustrateMonthly(AL.JPA_POLICY, a.paidDays),
+    'allowance.offer.add': async (a: { companyId?: string; applicationId?: string; amount: number | null; unit?: 'MONTH' | 'DAY' | 'HOUR'; conditions?: string; benefits?: string; offeredOn?: string }) => AL.recordOffer(db, activeId(), a),
+    'allowance.offer.list': async (a: { companyId?: string } = {}) => AL.listOffers(db, activeId(), a?.companyId),
     'link.open': async (a: { url: string }) => { if (!/^https?:\/\//i.test(a.url)) throw new ApiError('Only web links can be opened.'); env.ui.openExternal(a.url); return true },
 
     // ---- AI settings
@@ -420,6 +445,39 @@ export function createApi(env: Env) {
       return env.ui.openPath(f)
     },
 
+    // ---- CV Studio approval + restore (tailored CV drafts are never final until the user approves them)
+    'docs.approve': async (a: { docId: string; approved: boolean }) => {
+      const d = get<any>(db, 'SELECT doc_id FROM document_versions WHERE doc_id=? AND profile_id=?', a.docId, activeId())
+      if (!d) throw new ApiError('Document not found.')
+      run(db, 'UPDATE document_versions SET approved_at=? WHERE doc_id=?', a.approved ? nowIso() : null, a.docId)
+      return true
+    },
+    'docs.restore': async (a: { docId: string }) => {
+      const d = get<any>(db, 'SELECT ast_json FROM document_versions WHERE doc_id=? AND profile_id=?', a.docId, activeId())
+      if (!d) throw new ApiError('Document not found.')
+      return h['docs.saveEdit']({ docId: a.docId, ast: JSON.parse(d.ast_json) })   // new version; old ones are never overwritten
+    },
+
+    // ---- My Resumes (manual upload, version, attach only; nothing is generated)
+    'resumes.pick': async () => env.ui.pickFile('resume'),
+    'resumes.list': async (a?: { archived?: boolean }) => RS.listResumes(db, activeId(), !!a?.archived),
+    'resumes.add': async (a: { path?: string; label?: string; resumeId?: string; note?: string }) => {
+      const p = profile()
+      const src = a.path ?? await env.ui.pickFile('resume'); if (!src) return null
+      return rsGuard(() => RS.addResume(db, p.profile_id, path.join(masterDir(p), '..', 'resumes'), { src, label: a.label, resumeId: a.resumeId, note: a.note }))
+    },
+    'resumes.rename': async (a: { resumeId: string; label: string }) => rsGuard(() => RS.renameResume(db, activeId(), a.resumeId, a.label)),
+    'resumes.archive': async (a: { resumeId: string; archived: boolean }) => RS.archiveResume(db, activeId(), a.resumeId, a.archived),
+    'resumes.attach': async (a: { appId: string; versionId: string }) => rsGuard(() => RS.attachResume(db, activeId(), a.appId, a.versionId)),
+    'resumes.detach': async (a: { appId: string }) => RS.detachResume(db, activeId(), a.appId),
+    'resumes.attached': async (a: { appId: string }) => RS.attachedFor(db, activeId(), a.appId),
+    'resumes.open': async (a: { versionId: string }) => {
+      const v = RS.versionFile(db, activeId(), a.versionId)
+      if (RS.fileState(v as any) === 'MISSING') throw new ApiError('That file is missing from disk.', 'FILE_MISSING')
+      return env.ui.openPath(v.stored_path)
+    },
+    'resumes.verify': async () => RS.listResumes(db, activeId(), true).flatMap((r) => r.versions.map((v: any) => ({ versionId: v.version_id, state: v.state }))),
+
     // ---- email
     'email.compose': async (a: { appId: string; kind: EmailKind; language?: 'en' | 'ms'; to?: string; interviewTopic?: string; interviewDate?: string }) => {
       const p = profile(); const app = A.getApp(db, p.profile_id, a.appId); const facts = P.listFacts(db, p.profile_id, true)
@@ -428,7 +486,9 @@ export function createApi(env: Env) {
       const cands: { key: string; label: string; path: string; name: string; exists: boolean; size: number; checked: boolean }[] = []
       const push = (key: string, label: string, f: string | null | undefined, checked: boolean) => { if (!f) return; const ex = fs.existsSync(f); cands.push({ key, label, path: f, name: path.basename(f), exists: ex, size: ex ? fs.statSync(f).size : 0, checked: checked && ex }) }
       const r = latest('RESUME'), l = latest('COVER_LETTER')
-      push('resume', 'resume (PDF)', r?.pdf_path, true)
+      const mine = RS.attachedFor(db, p.profile_id, a.appId)
+      if (mine) push('myresume', `my resume (${mine.label} v${mine.version_number})`, mine.stored_path, mine.state === 'OK')
+      push('resume', 'resume (PDF)', r?.pdf_path, !!r?.approved_at)
       push('letter', 'cover letter (PDF)', l?.pdf_path, true)
       const src = (listSourceDocs(db, p.profile_id) as any[])
       src.filter((s) => s.kind !== 'SUPPORT').slice(0, 2).forEach((s, i) => push(`master${i}`, `master CV (${s.original_name})`, s.stored_path, false))

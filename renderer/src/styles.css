@@ -1,41 +1,51 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------ design tokens
-   Warm paper neutrals + one indigo/periwinkle accent. Status colours are always paired with an icon or label (never colour alone).
-   Contrast (WCAG AA targets): muted/ink on bg/surface ≥ 4.5:1; faint is for non-essential metadata only (≥ 4.5:1 on surface too). */
+   Career Hub 4: warm paper + deep-ocean ink, two personal accent families.
+   Adam (Data Science) = cobalt + cyan. Akif (Information Systems) = coral + teal. Set on <html data-profile>.
+   Status and match colours always travel with a label or shape, never colour alone. Body text >= 4.5:1 on its surface. */
 :root {
-  --bg: #f6f5f1; --surface: #ffffff; --surface2: #eeede8; --surface3: #e6e4dd;
-  --line: #e2e0d8; --line-strong: #c9c6bb;
-  --ink: #1b1a22; --muted: #5d5b69; --faint: #6f6d7e;
-  --primary: #4338ca; --primary-hover: #372fa8; --on-primary: #ffffff; --primary-soft: #ecebfb; --accent: #8b9cf6;
-  --ok: #17693f; --ok-bg: #e3f2ea; --warn: #85500a; --warn-bg: #fbefd8; --bad: #a3261c; --bad-bg: #fbe7e4; --info: #3b34b5; --info-bg: #ecebfb;
-  --shadow-sm: 0 1px 2px rgba(27, 26, 34, .06); --shadow-md: 0 6px 20px rgba(27, 26, 34, .08); --shadow-lg: 0 12px 40px rgba(27, 26, 34, .14);
-  --ring-track: #e4e2da;
-  --dur-fast: 120ms; --dur: 200ms; --dur-slow: 280ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --bg: #fbf6ec; --surface: #fffdf8; --surface2: #f4ecdb; --surface3: #ebdfc6;
+  --line: #e6dac2; --line-strong: #cdbe9f;
+  --ink: #10213f; --muted: #4a5774; --faint: #5d6985;
+  --primary: #2a4bd7; --primary-hover: #1f3ab0; --on-primary: #ffffff; --primary-soft: #e2e8ff; --accent: #0e8fa3; --accent-soft: #d8f3f7;
+  --violet: #6d45d6; --violet-soft: #ece6ff; --mint: #0d8a64; --mint-soft: #d9f3e8; --coral: #c23b28; --coral-soft: #fce4de; --amber: #8a5a07; --amber-soft: #fbecc9; --cobalt: #2a4bd7; --cobalt-soft: #e2e8ff;
+  --ok: #0d6e48; --ok-bg: #dcf3e8; --warn: #85500a; --warn-bg: #fbecc9; --bad: #a3261c; --bad-bg: #fbe3df; --info: #1d5f90; --info-bg: #dcebf7;
+  --tier-excellent: #0d8a64; --tier-strong: #2a4bd7; --tier-moderate: #b0720a; --tier-limited: #7a5aa8;
+  --shadow-sm: 0 1px 2px rgba(16, 33, 63, .07); --shadow-md: 0 8px 24px rgba(16, 33, 63, .10); --shadow-lg: 0 16px 48px rgba(16, 33, 63, .18);
+  --ring-track: #e6dac2;
+  --dur-fast: 120ms; --dur: 200ms; --dur-slow: 320ms; --ease: cubic-bezier(.2, .7, .2, 1); --ease-spring: cubic-bezier(.3, 1.4, .5, 1);
   color-scheme: light;
 }
+:root[data-profile="akif"] { --primary: #c23b28; --primary-hover: #a23020; --primary-soft: #fce4de; --accent: #0b8a82; --accent-soft: #d6f2ef; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1018; --surface: #171925; --surface2: #1f2232; --surface3: #272b3f;
-    --line: #2a2d40; --line-strong: #3b4059;
-    --ink: #eceaf6; --muted: #aaa9bf; --faint: #8e8ca6;
-    --primary: #9aa7ff; --primary-hover: #b4bdff; --on-primary: #0d1033; --primary-soft: #232748; --accent: #7e8ff0;
-    --ok: #6fd1a0; --ok-bg: #15281f; --warn: #e6b45c; --warn-bg: #2c2412; --bad: #f08a80; --bad-bg: #2f1a1a; --info: #aab6ff; --info-bg: #222647;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4); --shadow-md: 0 6px 20px rgba(0, 0, 0, .35); --shadow-lg: 0 12px 40px rgba(0, 0, 0, .5);
-    --ring-track: #2c3048;
+    --bg: #0a1224; --surface: #111c36; --surface2: #172545; --surface3: #1f3059;
+    --line: #223562; --line-strong: #35508a;
+    --ink: #eaf0ff; --muted: #aebbdc; --faint: #94a3c8;
+    --primary: #8fa8ff; --primary-hover: #aebfff; --on-primary: #0a1230; --primary-soft: #1b2a63; --accent: #4dd6e8; --accent-soft: #123a47;
+    --violet: #b9a2ff; --violet-soft: #2a2160; --mint: #4fd9a8; --mint-soft: #11382e; --coral: #ff9a86; --coral-soft: #4a2018; --amber: #f0bd5c; --amber-soft: #3a2c0c; --cobalt: #8fa8ff; --cobalt-soft: #1b2a63;
+    --ok: #6fe0ae; --ok-bg: #12332a; --warn: #f0bd5c; --warn-bg: #3a2c0c; --bad: #ff9c92; --bad-bg: #3a1a1c; --info: #8cc9f0; --info-bg: #12304a;
+    --tier-excellent: #4fd9a8; --tier-strong: #8fa8ff; --tier-moderate: #f0bd5c; --tier-limited: #b9a2ff;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .45); --shadow-md: 0 8px 24px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 48px rgba(0, 0, 0, .55);
+    --ring-track: #223562;
     color-scheme: dark;
   }
+  :root:not([data-theme="light"])[data-profile="akif"] { --primary: #ff9a86; --primary-hover: #ffb4a5; --on-primary: #2b0a04; --primary-soft: #4a2018; --accent: #4fd1c5; --accent-soft: #11393a; }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1018; --surface: #171925; --surface2: #1f2232; --surface3: #272b3f;
-  --line: #2a2d40; --line-strong: #3b4059;
-  --ink: #eceaf6; --muted: #aaa9bf; --faint: #8e8ca6;
-  --primary: #9aa7ff; --primary-hover: #b4bdff; --on-primary: #0d1033; --primary-soft: #232748; --accent: #7e8ff0;
-  --ok: #6fd1a0; --ok-bg: #15281f; --warn: #e6b45c; --warn-bg: #2c2412; --bad: #f08a80; --bad-bg: #2f1a1a; --info: #aab6ff; --info-bg: #222647;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4); --shadow-md: 0 6px 20px rgba(0, 0, 0, .35); --shadow-lg: 0 12px 40px rgba(0, 0, 0, .5);
-  --ring-track: #2c3048;
+  --bg: #0a1224; --surface: #111c36; --surface2: #172545; --surface3: #1f3059;
+  --line: #223562; --line-strong: #35508a;
+  --ink: #eaf0ff; --muted: #aebbdc; --faint: #94a3c8;
+  --primary: #8fa8ff; --primary-hover: #aebfff; --on-primary: #0a1230; --primary-soft: #1b2a63; --accent: #4dd6e8; --accent-soft: #123a47;
+  --violet: #b9a2ff; --violet-soft: #2a2160; --mint: #4fd9a8; --mint-soft: #11382e; --coral: #ff9a86; --coral-soft: #4a2018; --amber: #f0bd5c; --amber-soft: #3a2c0c; --cobalt: #8fa8ff; --cobalt-soft: #1b2a63;
+  --ok: #6fe0ae; --ok-bg: #12332a; --warn: #f0bd5c; --warn-bg: #3a2c0c; --bad: #ff9c92; --bad-bg: #3a1a1c; --info: #8cc9f0; --info-bg: #12304a;
+  --tier-excellent: #4fd9a8; --tier-strong: #8fa8ff; --tier-moderate: #f0bd5c; --tier-limited: #b9a2ff;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .45); --shadow-md: 0 8px 24px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 48px rgba(0, 0, 0, .55);
+  --ring-track: #223562;
   color-scheme: dark;
 }
+:root[data-theme="dark"][data-profile="akif"] { --primary: #ff9a86; --primary-hover: #ffb4a5; --on-primary: #2b0a04; --primary-soft: #4a2018; --accent: #4fd1c5; --accent-soft: #11393a; }
 
 @theme inline {
   --color-bg: var(--bg); --color-surface: var(--surface); --color-surface2: var(--surface2); --color-surface3: var(--surface3);
@@ -44,9 +54,10 @@
   --color-primary: var(--primary); --color-primary-hover: var(--primary-hover); --color-on-primary: var(--on-primary); --color-primary-soft: var(--primary-soft); --color-accent: var(--accent);
   --color-ok: var(--ok); --color-ok-bg: var(--ok-bg); --color-warn: var(--warn); --color-warn-bg: var(--warn-bg);
   --color-bad: var(--bad); --color-bad-bg: var(--bad-bg); --color-info: var(--info); --color-info-bg: var(--info-bg);
-  --font-sans: Inter, "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  /* editorial display face, from system fonts only (nothing is downloaded) */
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Source Serif Pro", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", "Segoe UI Variable Text", system-ui, -apple-system, sans-serif;
+  /* self-hosted (bundled, OFL) fonts: Plus Jakarta Sans for UI and figures, Fraunces for display, Geist Mono for emails and URLs */
+  --font-display: "Fraunces Variable", Fraunces, "Iowan Old Style", Georgia, serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
   --shadow-card: var(--shadow-sm); --shadow-pop: var(--shadow-md);
 }
 
@@ -58,9 +69,10 @@ button, [role="tab"], select, summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 textarea, input, select { font: inherit; }
 .tnum { font-variant-numeric: tabular-nums; }
-.font-display { letter-spacing: -0.01em; }
-.page-title { font-family: var(--font-display); font-size: 1.85rem; line-height: 1.15; font-weight: 600; letter-spacing: -0.015em; }
-.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.num-display { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; letter-spacing: -0.02em; font-weight: 700; }
+.font-display { letter-spacing: -0.02em; font-weight: 600; }
+.page-title { font-family: var(--font-display); font-size: 2.15rem; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; }
+.eyebrow { font-size: 13px; font-weight: 500; color: var(--muted); }   /* sentence case, no tracking */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
 .card-soft { background: var(--surface2); border-radius: 12px; }
 .hero-wash { background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 60%), var(--surface); }
@@ -93,3 +105,66 @@ textarea, input, select { font: inherit; }
 /* The A4 print preview never animates and never takes app styling */
 .a4-sheet, .a4-sheet * { animation: none !important; transition: none !important; }
 .scroll-thin { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+
+/* ------------------------------------------------------------------ Career Hub viewer: the reading-room ledger
+   One signature: the evidence mark. Solid = verified, dashed ring = unverified claim, hollow ring = unknown, bar = confirmed none.
+   Surfaces are flat with hairlines; the accent marks only selection, the primary action and verified evidence. */
+.mark { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 2px; }
+.mark-verified { background: var(--mint); }
+.mark-probable { background: linear-gradient(90deg, var(--mint) 50%, transparent 50%); box-shadow: inset 0 0 0 1.5px var(--mint); }
+.mark-unverified { border: 1.5px dashed var(--faint); background: transparent; }
+.mark-unknown { box-shadow: inset 0 0 0 1px var(--line-strong); background: transparent; }
+.mark-none { background: var(--bad); height: 3px; margin-block: 3px; width: 11px; border-radius: 0; }
+.ledger-sel { border-left: 2px solid transparent; transition: background-color var(--dur-fast), border-color var(--dur-fast); }
+.ledger-sel[aria-current="true"], .ledger-sel.is-on { border-left-color: var(--primary); background: color-mix(in srgb, var(--surface2) 70%, transparent); }
+.reveal-copy { opacity: 0; transition: opacity var(--dur-fast); }
+.has-reveal:hover .reveal-copy, .has-reveal:focus-within .reveal-copy { opacity: 1; }
+.figure { font-family: var(--font-sans); font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum", "lnum"; letter-spacing: -0.035em; font-weight: 800; line-height: 1; }
+.prose-read { font-size: 15px; line-height: 1.75; max-width: 68ch; }
+@keyframes rule-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.rule-in { transform-origin: left; animation: rule-in var(--dur-slow) var(--ease) both; }
+
+/* ------------------------------------------------------------------ Career Hub 4: colour, meters, motion */
+.hero-band { position: relative; background: linear-gradient(115deg, color-mix(in srgb, var(--primary) 16%, var(--surface)) 0%, color-mix(in srgb, var(--accent) 12%, var(--surface)) 55%, var(--surface) 100%); border-bottom: 1px solid var(--line); }
+.hero-band::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(60% 120% at 100% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%); }
+.seg { position: relative; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--line); }
+.seg > button { position: relative; z-index: 1; padding: 6px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--muted); transition: color var(--dur-fast); white-space: nowrap; }
+.seg > button[aria-pressed="true"] { color: var(--on-primary); }
+.seg-pill { position: absolute; z-index: 0; top: 3px; bottom: 3px; border-radius: 9px; background: var(--primary); box-shadow: var(--shadow-sm); transition: transform var(--dur-slow) var(--ease-spring), width var(--dur-slow) var(--ease); }
+.chip-f { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); transition: background-color var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), transform var(--dur-fast); }
+.chip-f:hover { color: var(--ink); border-color: var(--primary); }
+.chip-f[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+.chip-f:disabled { opacity: .45; cursor: not-allowed; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot-gov { background: var(--violet); } .dot-priv { background: var(--accent); } .dot-glc { background: var(--amber); } .dot-mnc { background: var(--cobalt); } .dot-sme { background: var(--mint); } .dot-other { background: var(--faint); }
+.co-card { position: relative; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); transition: transform var(--dur) var(--ease), box-shadow var(--dur), border-color var(--dur); }
+.co-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); border-color: var(--line-strong); }
+.co-card[aria-current="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), var(--shadow-md); }
+.co-row { border-bottom: 1px solid var(--line); transition: background-color var(--dur-fast); }
+.co-row:hover { background: var(--surface2); }
+.co-row[aria-current="true"] { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+.meter-track { stroke: var(--ring-track); }
+.meter-arc { transition: stroke-dashoffset 900ms var(--ease), stroke var(--dur); }
+.bar-track { height: 8px; border-radius: 99px; background: var(--ring-track); overflow: hidden; }
+.bar-fill2 { height: 100%; border-radius: 99px; transition: width 700ms var(--ease); }
+.tier-excellent { --tier: var(--tier-excellent); } .tier-strong { --tier: var(--tier-strong); } .tier-moderate { --tier: var(--tier-moderate); } .tier-limited { --tier: var(--tier-limited); }
+.tier-text { color: var(--tier); }
+@keyframes stagger-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.stagger > * { animation: stagger-in var(--dur-slow) var(--ease) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; } .stagger > *:nth-child(2) { animation-delay: 40ms; } .stagger > *:nth-child(3) { animation-delay: 80ms; } .stagger > *:nth-child(4) { animation-delay: 120ms; } .stagger > *:nth-child(n+5) { animation-delay: 150ms; }
+.diff-add { background: color-mix(in srgb, var(--mint) 16%, transparent); box-shadow: inset 3px 0 0 var(--mint); }
+.diff-del { background: color-mix(in srgb, var(--coral) 12%, transparent); box-shadow: inset 3px 0 0 var(--coral); }
+.diff-mov { background: color-mix(in srgb, var(--cobalt) 12%, transparent); box-shadow: inset 3px 0 0 var(--cobalt); }
+.diff-edit { background: color-mix(in srgb, var(--amber) 16%, transparent); box-shadow: inset 3px 0 0 var(--amber); }
+.pick { color: #fff; transition: transform var(--dur) var(--ease-spring), box-shadow var(--dur); box-shadow: var(--shadow-md); }
+.pick:hover, .pick:focus-visible { transform: translateY(-3px) scale(1.005); box-shadow: var(--shadow-lg); }
+.pick:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; border-radius: 24px; }
+.pick-adam { background: linear-gradient(135deg, #2a4bd7 0%, #1f62d0 52%, #0b7c8c 100%); }
+.pick-akif { background: linear-gradient(135deg, #c23b28 0%, #b4443a 46%, #0b7f78 100%); }
+.pick-orb { position: absolute; right: -60px; top: -60px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.32), rgba(255,255,255,0) 68%); transition: transform 600ms var(--ease); }
+.pick:hover .pick-orb { transform: scale(1.15) translate(-8px, 8px); }
+.pick-go { color: #1b2a63; transition: transform var(--dur) var(--ease-spring); }
+.pick-akif .pick-go { color: #7a1f12; }
+.pick:hover .pick-go { transform: translateX(4px); }
+select { font-family: var(--font-sans); font-weight: 500; font-synthesis: none; font-variant-ligatures: none; }

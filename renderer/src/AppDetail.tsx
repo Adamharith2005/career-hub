@@ -52,7 +52,7 @@ export function AppDetail({ id, initialTab, onBack }: { id: string; initialTab?:
         </div>
       </header>
 
-      <div className="mt-5"><Tabs label="Application sections" value={tab} onChange={setTab} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'documents', label: 'Documents' }, { key: 'email', label: 'Email' }, { key: 'timeline', label: 'Timeline' }]} /></div>
+      <div className="mt-5"><Tabs label="Application sections" value={tab} onChange={setTab} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'documents', label: 'CV Studio' }, { key: 'email', label: 'Email' }, { key: 'timeline', label: 'Timeline' }]} /></div>
       <div key={tab} role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className="anim-fade pt-5">
         {tab === 'overview' && <Overview detail={q.data} reload={reload} onGenerate={() => setTab('documents')} />}
         {tab === 'documents' && <DocumentsTab detail={q.data} reload={reload} />}

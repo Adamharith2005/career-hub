@@ -1,153 +1,83 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, ChevronsUpDown, Home as HomeIcon, ListChecks, Plus, Settings as SettingsIcon, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Building2, FileText, Settings as SettingsIcon, UserRound } from 'lucide-react'
 import { api, errMsg } from './api'
-import { Ctx, type Boot, type NewAppOpts, type Page, type PrepareOpts } from './ctx'
-import { Logo } from './kit'
-import { PrepareApplication } from './PrepareApplication'
-import { Button, Input, Field, Spinner, ToastHost, cx, useToast } from './ui'
-import { Onboarding } from './Onboarding'
-import { HomePage, ApplicationsPage } from './Applications'
-import { AppDetail } from './AppDetail'
-import { NewApplication } from './NewApplication'
-import { CompaniesPage } from './Companies'
-import { ProfilePage } from './Profile'
-import { SettingsPage } from './Settings'
+import { ToastHost, Spinner, cx, useToast } from './ui'
+import { V, type Page, type ProfileSummary } from './viewer/vctx'
+import { Picker } from './viewer/Picker'
+import { Explorer } from './viewer/Explorer'
+import { ProfilePage } from './viewer/ProfilePage'
+import { DocManager } from './viewer/Docs'
+import { MasterPanel } from './viewer/Masters'
+import { SettingsPage } from './viewer/Settings'
 
-const NAV: { key: Page; label: string; icon: typeof HomeIcon }[] = [
-  { key: 'companies', label: 'Companies', icon: Building2 },
-  { key: 'applications', label: 'Applications', icon: ListChecks },
-  { key: 'profile', label: 'My Profile', icon: UserRound },
-  { key: 'home', label: 'Home', icon: HomeIcon },
+/** Career Hub viewer: pick a profile, explore companies, copy what you need. No database, no tracking. */
+const NAV: { key: Page; label: string; icon: typeof Building2 }[] = [
+  { key: 'explore', label: 'Explore Companies', icon: Building2 },
+  { key: 'profile', label: 'My Profile & CV', icon: UserRound },
+  { key: 'resumes', label: 'My Resumes', icon: FileText },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ]
+const store = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d } catch { return d } }
+const save = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* private mode */ } }
 
 export function App() { return <ToastHost><Root /></ToastHost> }
 
 function Root() {
   const toast = useToast()
-  const [boot, setBoot] = useState<Boot | null>(null)
-  const [fatal, setFatal] = useState<string | null>(null)
-  const [page, setPage] = useState<Page>('companies')
-  const [detail, setDetail] = useState<{ id: string; tab?: string } | null>(null)
-  const [newOpts, setNewOpts] = useState<NewAppOpts | null>(null)
-  const [prep, setPrep] = useState<PrepareOpts | null>(null)
-  const [tick, setTick] = useState(0)
+  const [profiles, setProfiles] = useState<ProfileSummary[] | null>(null)
+  const [profileId, setProfileId] = useState<string | null>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [page, setPage] = useState<Page>('explore')
+  const [selected, setSelected] = useState<string | null>(null)
+  const [docsKey, setDocsKey] = useState(0)
+  const [theme, setTheme] = useState(store('ch.theme', 'system'))
+  const [motion, setMotion] = useState(store('ch.motion', 'normal'))
+  useEffect(() => { const r = document.documentElement; if (theme === 'system') r.removeAttribute('data-theme'); else r.dataset.theme = theme; save('ch.theme', theme) }, [theme])
+  useEffect(() => { const r = document.documentElement; if (motion === 'reduced') r.dataset.motion = 'reduced'; else r.removeAttribute('data-motion'); save('ch.motion', motion) }, [motion])
+  useEffect(() => { const r = document.documentElement; if (profileId) r.dataset.profile = profileId; else r.removeAttribute('data-profile') }, [profileId])
+  useEffect(() => { api('v.profiles').then(setProfiles).catch((e) => toast('bad', errMsg(e))) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const loadProfile = useCallback(async (id: string) => { const p = await api('v.profile.get', { id }); setProfile((cur: any) => (p.id === id ? p : cur)) }, [])
+  useEffect(() => { if (!profileId) return; let live = true; api('v.profile.get', { id: profileId }).then((p) => { if (live) setProfile(p) }).catch((e) => toast('bad', errMsg(e))); return () => { live = false } }, [profileId])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refresh = useCallback(async () => {
-    try { setBoot(await api('boot')); setTick((t) => t + 1) } catch (e) { setFatal(errMsg(e)) }
-  }, [])
-  useEffect(() => { void refresh() }, [refresh])
-
-  // theme
-  const theme = boot?.profile?.prefs?.theme ?? 'system'
-  useEffect(() => { const r = document.documentElement; if (theme === 'system') r.removeAttribute('data-theme'); else r.dataset.theme = theme }, [theme])
-  const motion = boot?.profile?.prefs?.motion ?? 'system'
-  useEffect(() => { const r = document.documentElement; if (motion === 'reduced') r.dataset.motion = 'reduced'; else r.removeAttribute('data-motion') }, [motion])
-
-  if (fatal) return <div role="alert" className="m-auto max-w-md p-10 text-center"><h1 className="text-lg font-semibold">Career Hub could not start</h1><p className="mt-2 text-muted">{fatal}</p></div>
-  if (!boot) return <div className="grid h-full place-items-center"><Spinner label="Opening Career Hub" /></div>
-  if (!boot.profile) return <CreateProfile onDone={refresh} />
+  if (!profiles) return <Spinner label="Opening Career Hub" />
+  if (!profileId) return <Picker profiles={profiles} onPick={(id) => { setProfile(null); setProfileId(id); setPage('explore'); setSelected(null) }} />
+  if (!profile || profile.id !== profileId) return <Spinner label="Loading profile" />
 
   const ctx = {
-    boot, refresh, tick,
-    go: (p: Page) => { setDetail(null); setPage(p) },
-    openApp: (id: string, tab?: string) => setDetail({ id, tab }),
-    newApp: (o: NewAppOpts = {}) => setNewOpts(o),
-    prepare: (o: PrepareOpts) => setPrep(o),
+    profiles, profile, profileId, page, selected,
+    switchProfile: (id: string) => { setProfile(null); setProfileId(id); setSelected(null) },
+    leave: () => { setProfileId(null); setProfile(null); setSelected(null) },
+    go: setPage, select: setSelected, reloadProfile: () => loadProfile(profileId),
   }
-
-  // Onboarding needs the same context (record editors read it), so it is rendered inside the provider too.
-  if (!boot.profile.onboarding_done) return <Ctx.Provider value={ctx}><Onboarding boot={boot} refresh={refresh} /></Ctx.Provider>
-
+  const me = profiles.find((p) => p.id === profileId)!
   return (
-    <Ctx.Provider value={ctx}>
-      <div className="flex h-full flex-col md:flex-row">
-        <Sidebar boot={boot} page={detail ? 'applications' : page} onNav={ctx.go} onNew={() => ctx.newApp()} onSwitch={async (id) => { await api('profile.switch', { id }); setDetail(null); setPage('companies'); setPrep(null); setNewOpts(null); await refresh() }} onAdd={async (name) => { try { await api('profile.create', { name }); setDetail(null); setPage('companies'); setPrep(null); setNewOpts(null); await refresh() } catch (e) { toast('bad', errMsg(e)) } }} />
-        <main id="main" className={cx('scroll-thin min-h-0 min-w-0 flex-1', page === 'companies' && !detail ? 'overflow-hidden' : 'overflow-y-auto')}>
-          <div key={detail ? `d-${detail.id}` : page} className={cx('anim-fade-up mx-auto w-full max-w-[1360px] px-4 py-5 sm:px-8 sm:py-7', page === 'companies' && !detail && 'h-full')}>
-            {detail ? <AppDetail id={detail.id} initialTab={detail.tab} onBack={() => setDetail(null)} />
-              : page === 'home' ? <HomePage />
-              : page === 'applications' ? <ApplicationsPage />
-              : page === 'companies' ? <CompaniesPage />
-              : page === 'profile' ? <ProfilePage />
-              : <SettingsPage />}
-          </div>
+    <V.Provider value={ctx}>
+      <div className="flex h-full min-h-0">
+        <aside className="flex w-[216px] shrink-0 flex-col border-r border-line px-5 py-6 max-[1180px]:w-[72px] max-[1180px]:items-center max-[1180px]:px-2" aria-label="Sidebar">
+          <p className="font-display text-[1.65rem] leading-none tracking-[-0.01em] max-[1180px]:hidden">Career Hub</p>
+          <p aria-hidden className="font-display hidden text-[1.5rem] leading-none max-[1180px]:block">CH</p>
+          <button onClick={ctx.leave} data-testid="profile-chip" aria-label={`Active profile ${me.displayName}. Switch profile`} title="Switch profile" className="press mt-7 w-full border-y border-line py-3 text-left hover:border-primary max-[1180px]:text-center">
+            <span key={me.id} className="anim-detail block">
+              <span className="block truncate text-[15px] font-semibold leading-tight max-[1180px]:sr-only" data-testid="active-profile">{me.displayName}</span>
+              <span aria-hidden className="font-display hidden text-[1.6rem] leading-none max-[1180px]:block">{me.initials}</span>
+              <span className="block truncate text-[12.5px] text-muted max-[1180px]:sr-only">{me.specialisation}</span>
+              <span className="mt-1 block text-[12.5px] text-primary max-[1180px]:hidden">Switch profile</span>
+            </span>
+          </button>
+          <nav className="mt-6 flex flex-col" aria-label="Primary">
+            {NAV.map((n) => { const on = page === n.key; return (
+              <button key={n.key} onClick={() => setPage(n.key)} aria-current={on ? 'page' : undefined} title={n.label} className={cx('ledger-sel press flex items-center gap-3 py-2 pl-3 text-left text-[14px] transition-colors duration-150 max-[1180px]:justify-center max-[1180px]:pl-2', on ? 'is-on font-medium text-ink' : 'text-muted hover:text-ink')}>
+                <n.icon size={16} strokeWidth={1.6} aria-hidden className="shrink-0" /><span className="max-[1180px]:sr-only">{n.label}</span></button>) })}
+          </nav>
+          <p className="mt-auto text-[12px] leading-snug text-faint max-[1180px]:hidden">Private and offline. Nothing is sent anywhere, and nothing is tracked.</p>
+        </aside>
+        <main key={profileId} className="anim-fade-up min-h-0 min-w-0 flex-1" aria-label={NAV.find((n) => n.key === page)!.label}>
+          {page === 'explore' ? <Explorer />
+            : page === 'profile' ? <ProfilePage />
+            : page === 'resumes' ? <div className="scroll-thin h-full overflow-y-auto px-8 py-6"><header className="mb-6"><h1 className="page-title">My Resumes</h1><p className="mt-2 max-w-xl text-[14px] text-muted">Files you wrote yourself, kept exactly as given, with every version. Career Hub never rewrites them.</p></header><MasterPanel onChanged={() => setDocsKey((k) => k + 1)} /><DocManager key={docsKey} kind="RESUME" /></div>
+            : <SettingsPage theme={theme} setTheme={setTheme} motion={motion} setMotion={setMotion} />}
         </main>
       </div>
-      {newOpts && <NewApplication opts={newOpts} onClose={() => setNewOpts(null)} />}
-      {prep && <PrepareApplication opts={prep} onClose={() => setPrep(null)} />}
-    </Ctx.Provider>
-  )
-}
-
-function CreateProfile({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState('')
-  const [err, setErr] = useState('')
-  const toast = useToast()
-  const go = async () => { try { await api('profile.create', { name }); onDone() } catch (e) { setErr(errMsg(e)); toast('bad', errMsg(e)) } }
-  return (
-    <div className="grid h-full place-items-center p-6">
-      <div className="anim-fade-up w-full max-w-md">
-        <div className="mb-8 flex items-center gap-2.5"><Logo size={34} /><span className="font-display text-xl font-semibold">Career Hub</span></div>
-        <h1 className="page-title">Welcome. Let’s set up your private profile.</h1>
-        <p className="mt-2 text-muted">Everything stays on this computer. No account, no cloud. You can add other profiles later for someone else who uses this device.</p>
-        <form className="mt-6 space-y-4" onSubmit={(e) => { e.preventDefault(); void go() }}>
-          <Field label="Your name" error={err}>{(id) => <Input id={id} data-autofocus autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr('') }} placeholder="e.g. Nur Aisyah" autoComplete="name" />}</Field>
-          <Button variant="primary" type="submit" disabled={!name.trim()} className="w-full">Continue</Button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function Sidebar({ boot, page, onNav, onNew, onSwitch, onAdd }: { boot: Boot; page: Page; onNav: (p: Page) => void; onNew: () => void; onSwitch: (id: string) => void; onAdd: (name: string) => void }) {
-  const [menu, setMenu] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!menu) return
-    const h = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setMenu(false) }
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }
-    document.addEventListener('mousedown', h); document.addEventListener('keydown', k)
-    return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k) }
-  }, [menu])
-  const p = boot.profile
-  return (
-    <>
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[70] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
-      <aside className="flex shrink-0 flex-col gap-3 border-b border-line bg-surface2/50 px-3 py-3 md:w-[236px] md:border-b-0 md:border-r md:px-3.5 md:py-5" aria-label="Primary">
-        <div className="flex items-center justify-between gap-2 md:block">
-          <div className="flex items-center gap-2.5 px-1 md:mb-5"><Logo size={30} /><span className="font-display text-lg font-semibold">Career Hub</span></div>
-          <div ref={ref} className="relative md:mb-3">
-            <button onClick={() => setMenu(!menu)} aria-haspopup="menu" aria-expanded={menu} className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-left text-sm hover:bg-surface2">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary">{p.name.slice(0, 1).toUpperCase()}</span>
-              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span><ChevronsUpDown size={14} className="text-muted" aria-hidden />
-            </button>
-            {menu && (
-              <div role="menu" className="anim-fade absolute left-0 right-0 top-full z-30 mt-1 min-w-[220px] rounded-lg border border-line bg-surface p-1 shadow-lg">
-                {boot.profiles.map((x) => <button key={x.profile_id} role="menuitem" onClick={() => { setMenu(false); if (x.profile_id !== p.profile_id) onSwitch(x.profile_id) }} className={cx('flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-surface2', x.profile_id === p.profile_id && 'font-semibold')}>{x.name}{x.profile_id === p.profile_id && <span aria-label="current">✓</span>}</button>)}
-                <div className="my-1 border-t border-line" />
-                {adding ? (
-                  <form className="flex gap-1 p-1" onSubmit={(e) => { e.preventDefault(); if (name.trim()) { onAdd(name); setName(''); setAdding(false); setMenu(false) } }}>
-                    <Input aria-label="New profile name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-8 py-1" /><Button size="sm" type="submit" variant="primary">Add</Button>
-                  </form>
-                ) : <button role="menuitem" onClick={() => setAdding(true)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-primary hover:bg-surface2"><Plus size={14} aria-hidden />Add another profile</button>}
-              </div>
-            )}
-          </div>
-        </div>
-        <Button variant="primary" onClick={onNew} icon={<Plus size={16} aria-hidden />} className="w-full">New application</Button>
-        <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label="Main">
-          {NAV.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => onNav(key)} aria-current={page === key ? 'page' : undefined}
-              className={cx('flex items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium transition-colors duration-150', page === key ? 'bg-primary-soft text-primary' : 'text-muted hover:bg-surface2 hover:text-ink')}>
-              <Icon size={17} aria-hidden />{label}
-            </button>
-          ))}
-        </nav>
-        <p className="mt-auto hidden px-1 text-xs leading-relaxed text-faint md:block">Private by default — your profile and applications are stored only on this device.</p>
-      </aside>
-    </>
+    </V.Provider>
   )
 }

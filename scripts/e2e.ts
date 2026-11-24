@@ -1,18 +1,33 @@
-// End-to-end test: drives the REAL Electron app (real IPC, SQLite, PDF/DOCX export, pdf.js preview) with Playwright.
-// Native dialogs and external-app launches are replaced by env-var stubs (CAREER_HUB_E2E=1) so it can run unattended.
-// Run:  npm run build && node scripts/e2e.ts
+// End-to-end test for the Career Hub viewer: drives the REAL Electron app (real IPC, real PDF preview, real clipboard) with Playwright.
+// Uses a SYNTHETIC profile seed and fixture PDFs; no personal data. Native dialogs and external launches are stubbed (CAREER_HUB_E2E=1).
+// Run:  npm run build && npm run e2e
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
-import { makeCvPdf, JD_CYBER } from '../tests/helpers.ts'
+import { makeCvPdf } from '../tests/helpers.ts'
 
-const OUT = path.resolve('test-output'); const SHOTS = path.join(OUT, 'screens'); fs.mkdirSync(SHOTS, { recursive: true })
+const OUT = path.resolve('test-output'); const SHOTS = path.join(OUT, 'screens'); fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true })
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'careerhub-e2e-'))
-const userData = path.join(tmp, 'userdata'), pickFolder = path.join(tmp, 'Documents'), logFile = path.join(tmp, 'external.log')
-fs.mkdirSync(pickFolder, { recursive: true })
-const cv = await makeCvPdf(path.join(tmp, 'Alex Tester CV.pdf'))
+const userData = path.join(tmp, 'userdata'), logFile = path.join(tmp, 'external.log')
+const fixtureCv = await makeCvPdf(path.join(tmp, 'One CV.pdf'))
+const secondDoc = await makeCvPdf(path.join(tmp, 'One Second.pdf'), ['Alex Tester', 'Second resume variant', '', 'Education', 'Universiti Fixture Malaysia'])
+const REAL_WORKBOOK = process.env.CAREER_HUB_REAL_WORKBOOK ?? (fs.existsSync(path.join(os.homedir(), 'Downloads', 'CAREER_HUB_EMPLOYER_ATLAS_V3_recovered_audited.xlsx')) ? path.join(os.homedir(), 'Downloads', 'CAREER_HUB_EMPLOYER_ATLAS_V3_recovered_audited.xlsx') : '')
+const seed = path.join(tmp, 'seed.json')
+fs.writeFileSync(seed, JSON.stringify({ version: 1, profiles: [
+  { id: 'adam', displayName: 'Adam', fullName: 'Test Student One', specialisation: 'Data Science', university: 'Universiti Fixture', degree: 'Bachelor of Computer Science (Data Science)', contact: { email: 'one@example.com', phone: '+60 11-111 1111', location: 'Fixtureville' },
+    links: [{ label: 'GitHub', url: 'https://github.com/example-one' }], headline: '', summary: 'Synthetic profile one.', education: [{ title: 'BCS Data Science', institution: 'Universiti Fixture', dates: '2024 – 2028', points: ['CGPA: 3.50'] }],
+    skills: [{ group: 'Programming', items: ['Python', 'SQL'] }], projects: [{ title: 'Churn Study', context: 'Coursework', date: '2026', status: 'COMPLETED', stack: ['Python', 'SQL'], points: ['Analysed churn.'], caveat: '', url: null }],
+    otherRepos: [], experience: [], leadership: [], languages: ['English'], interests: ['Data Analyst Intern', 'Machine Learning Intern'], internshipWindow: '', availabilityPhrase: '', reviewNotes: ['Synthetic review note.'],
+    documents: [{ label: 'One resume', kind: 'RESUME', path: fixtureCv }] },
+  { id: 'akif', displayName: 'Akif', fullName: 'Test Student Two', specialisation: 'Information Systems', university: 'Universiti Fixture', degree: 'Bachelor of Computer Science (Information Systems)', contact: { email: 'two@example.com', phone: '+60 12-222 2222', location: 'Fixtureburg' },
+    links: [], headline: '', summary: '', education: [], skills: [{ group: 'Web', items: ['React'] }], projects: [{ title: 'Cloud Scanner', context: 'Final Year Project', date: '2027', status: 'PROPOSED', stack: ['Terraform', 'AWS'], points: [], caveat: 'Proposed only.', url: null }],
+    otherRepos: [], experience: [], leadership: [], languages: [], interests: ['Software Engineering', 'Cybersecurity', 'Cloud Computing'], internshipWindow: '', availabilityPhrase: '', reviewNotes: [], documents: [] }] }))
 
+const CAT: any[] = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'catalog.json'), 'utf8')).companies
+const N = CAT.length, N_CY = CAT.filter((c) => c.city === 'Cyberjaya').length, N_PJ = CAT.filter((c) => c.city === 'Putrajaya').length, N_IOI = CAT.filter((c) => c.city === 'IOI Resort City').length
+const N_GOV = CAT.filter((c) => c.sector === 'GOVERNMENT').length, N_NON = CAT.filter((c) => c.sector === 'NON_GOVERNMENT').length
 const results: { name: string; ok: boolean; detail?: string }[] = []
 const errors: string[] = []
 async function step(name: string, fn: () => Promise<void>) {
@@ -27,7 +42,7 @@ const expect = (c: unknown, msg: string) => { if (!c) throw new Error(msg) }
 async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v
-  Object.assign(env, { CAREER_HUB_E2E: '1', CAREER_HUB_USER_DATA: userData, CAREER_HUB_PICK_FOLDER: pickFolder, CAREER_HUB_PICK_CV: cv, CAREER_HUB_E2E_LOG: logFile })
+  Object.assign(env, { CAREER_HUB_E2E: '1', CAREER_HUB_USER_DATA: userData, CAREER_HUB_SEED: seed, CAREER_HUB_PICK_DOC: secondDoc, CAREER_HUB_PICK_WORKBOOK: (!!REAL_WORKBOOK && fs.existsSync(REAL_WORKBOOK)) ? REAL_WORKBOOK : '', CAREER_HUB_E2E_LOG: logFile })
   const app = await electron.launch({ args: ['.'], env })
   const page = await app.firstWindow()
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
@@ -36,329 +51,239 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   return { app, page }
 }
 const resize = (app: ElectronApplication, w: number, h: number) => app.evaluate(({ BrowserWindow }, [W, H]) => { const win = BrowserWindow.getAllWindows()[0]; win.setMinimumSize(360, 500); win.setSize(W, H); win.center() }, [w, h])
-const shot = async (page: Page, name: string) => { await page.waitForTimeout(350); await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }) }
+const shot = async (page: Page, name: string) => { await page.waitForTimeout(450); await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }) }
 const noHScroll = async (page: Page, label: string) => { const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, bw: document.body.scrollWidth })); expect(o.sw <= o.cw + 1 && o.bw <= o.cw + 1, `${label}: horizontal scroll (${o.sw} > ${o.cw})`) }
+const clip = (app: ElectronApplication) => app.evaluate(({ clipboard }) => clipboard.readText())
+const count = async (page: Page) => Number((await page.getByTestId('result-count').locator('.figure').first().innerText()).trim())
+const waitCount = async (page: Page, n: number) => { await page.waitForFunction((x) => Number(document.querySelector('[data-testid="result-count"] .figure')?.textContent) === x, n, { timeout: 8000 }) }
+const clipEventually = async (app: ElectronApplication, pred: (t: string) => boolean) => { for (let i = 0; i < 30; i++) { if (pred(await clip(app))) return true; await new Promise((r) => setTimeout(r, 100)) } return false }
+const nav = (page: Page, name: string) => page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click()
 
 let { app, page } = await launch()
 await resize(app, 1440, 900)
-console.log('\nFirst run (profile-first: no resume is uploaded)')
 
-await step('shows the create-profile screen with no fabricated data', async () => {
-  await page.getByRole('heading', { name: /set up your private profile/i }).waitFor()
-  expect(!(await page.content()).includes('Alex Tester'), 'unexpected demo identity')
-  await shot(page, '01-welcome')
+console.log('\nLaunch and profiles')
+await step('opens straight to "Who’s exploring today?" with no database, login or setup', async () => {
+  await page.getByRole('heading', { name: /Who’s exploring today/ }).waitFor()
+  expect(await page.getByTestId('pick-adam').isVisible() && await page.getByTestId('pick-akif').isVisible(), 'both profile cards')
+  expect(!fs.existsSync(path.join(userData, 'careerhub.db')), 'a SQLite database was created')
+  expect(!(await page.content()).match(/password|sign up|register/i), 'no account UI')
+  await shot(page, '01-profile-picker')
 })
-await step('creates a profile', async () => { await page.getByLabel('Your name').fill('Alex Tester'); await page.getByRole('button', { name: 'Continue' }).click(); await page.getByRole('heading', { name: /Let’s start with you/ }).waitFor() })
-
-await step('step 1 of 4 — About you: only the name is required; autosaves; optional details tucked away', async () => {
-  expect((await page.getByRole('textbox', { name: /Full name/ }).inputValue()) === 'Alex Tester', 'name prefilled')
-  expect(!(await page.content()).match(/upload|CV|résumé/i) || true, '')
-  await page.getByLabel('Email (recommended)').fill('not-an-email'); await page.getByText('doesn’t look like an email').waitFor()
-  await page.getByLabel('Email (recommended)').fill('alex.tester@example.com')
-  await page.getByLabel('Phone (optional)').fill('+60 12-345 6789'); await page.getByLabel('Town or city (optional)').fill('Cyberjaya, Selangor')
-  await page.getByRole('button', { name: /Links and availability/ }).click()
-  await page.getByLabel('GitHub').fill('https://github.com/alextester-fixture'); await page.getByLabel('Internship starts').fill('March 2027'); await page.getByLabel('Internship ends').fill('August 2027')
-  await page.getByText('Saved', { exact: true }).first().waitFor({ timeout: 6000 })        // calm autosave feedback
-  await shot(page, '02-onboarding-about')
-  await page.getByRole('button', { name: 'Continue' }).first().click()
-  await page.getByRole('heading', { name: /Where do you study/ }).waitFor()
+await step('Adam opens the explorer with every organisation', async () => {
+  await page.getByTestId('pick-adam').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+  await waitCount(page, N); expect(await page.getByTestId('active-profile').innerText() === 'Adam', 'active profile visible')
+  await shot(page, '02-explorer-empty-detail')
 })
-await step('step 2 — Studies: structured education record (CGPA with scale), saved automatically', async () => {
-  await page.getByRole('button', { name: 'Add education' }).click()
-  await page.getByLabel('Institution *').fill('Universiti Fixture Malaysia'); await page.getByLabel('Programme *').fill('Bachelor of Computer Science (Hons), Cybersecurity')
-  await page.getByLabel('Level').selectOption('Bachelor'); await page.getByLabel('Started').fill('2023'); await page.getByLabel('Graduation (expected or actual)').fill('2027')
-  await page.getByLabel('CGPA / GPA (optional)').fill('3.62'); await page.getByLabel('Scale').selectOption('4.0')
-  await page.getByText('Saved', { exact: true }).first().waitFor({ timeout: 6000 })
-  await shot(page, '03-onboarding-study')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByRole('heading', { name: /what can you do/i }).waitFor()
-})
-await step('step 3 — Roles & skills: role is required; skills are chips by category', async () => {
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByText('Choose at least one role').first().waitFor()
-  await page.getByRole('checkbox', { name: 'Cybersecurity' }).click()
-  await page.getByRole('checkbox', { name: /Cloud \/ DevOps/ }).click()
-  const add = async (label: string, vals: string[]) => { const box = page.getByRole('combobox', { name: label, exact: true }); for (const v of vals) { await box.fill(v); await box.press('Enter') } }
-  await add('Languages', ['Python', 'Java', 'SQL', 'JavaScript']); await add('Frameworks', ['React', 'FastAPI']); await add('Security', ['Wireshark', 'Nmap', 'Burp Suite']); await add('Tools', ['Linux'])
-  await page.getByText('Saved', { exact: true }).first().waitFor({ timeout: 6000 })
-  await shot(page, '04-onboarding-skills')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByRole('heading', { name: /What have you built/ }).waitFor()
-})
-await step('step 4 — Projects: repeatable cards; a second project stays separate; zero work history is fine', async () => {
-  const fillProject = async (n: number, v: { title: string; type: string; built: string; tools: string[]; start: string; end: string }) => {
-    await page.getByRole('button', { name: /Add another project/ }).click()
-    const card = page.getByRole('group', { name: /project:/ }).nth(n)
-    await card.getByLabel('Project name *').fill(v.title); await card.getByLabel('Type').selectOption(v.type)
-    await card.getByLabel('What you actually built').fill(v.built)
-    for (const t of v.tools) { const box = card.getByRole('combobox', { name: 'Tech stack' }); await box.fill(t); await box.press('Enter') }
-    await card.getByLabel('Started').fill(v.start); await card.getByLabel('Finished').fill(v.end)
-    await card.getByText('Saved', { exact: true }).waitFor({ timeout: 6000 })
-  }
-  await fillProject(0, { title: 'Network Traffic Anomaly Detector', type: 'academic', built: 'Built a packet-capture pipeline in Python and Wireshark to flag unusual traffic patterns.\nTrained a Scikit-learn model on 12,000 labelled flows and compared two feature sets.', tools: ['Python', 'Wireshark', 'Scikit-learn'], start: 'Jan 2025', end: 'Present' })
-  await fillProject(1, { title: 'Campus Vulnerability Scanner', type: 'personal', built: 'Wrote an Nmap-based scanner with a FastAPI backend and React dashboard.\nDocumented findings against the OWASP Top 10.', tools: ['Nmap', 'FastAPI', 'React', 'OWASP Top 10'], start: 'Jun 2024', end: 'Aug 2024' })
-  await shot(page, '05-onboarding-projects')
-  await page.getByRole('button', { name: 'Finish setup' }).click()
-  await page.getByRole('heading', { name: /You’re set up, Alex/ }).waitFor()
-  await page.getByText('Ready to tailor applications').waitFor()
-})
-await step('finish: folder is created only after the user approves one; AI is not required', async () => {
-  expect(!fs.existsSync(path.join(pickFolder, 'Career Hub')), 'folder must not exist before authorization')
-  await page.getByRole('button', { name: /Choose another folder/ }).click()
-  await page.getByTestId('root-path').waitFor()
-  expect(fs.existsSync(path.join(pickFolder, 'Career Hub', 'Company-Data', 'cyberjaya-seed-source.tsv')), 'seed copy written')
-  await shot(page, '06-onboarding-done')
-  await page.getByRole('button', { name: /Explore Cyberjaya companies/ }).click()
-  await page.getByRole('heading', { name: 'Explore Cyberjaya' }).waitFor()
-})
-await step('no resume was ever required: nothing imported, yet profile is ready', async () => {
-  await page.getByRole('button', { name: 'My Profile', exact: true }).click()
-  await page.getByText('Ready to tailor applications').waitFor()
-  await page.getByText('No CV imported — and none is needed').waitFor()
-  await page.getByLabel('Duration available (weeks)').fill('24'); await page.getByLabel('Citizenship').selectOption('malaysian')
-  await page.getByText('Saved', { exact: true }).first().waitFor({ timeout: 6000 })
-  await noHScroll(page, 'profile'); await shot(page, '07-profile-1440')
+await step('navigation is minimal and has no tracker, kanban or CRM', async () => {
+  const labels = await page.getByRole('navigation', { name: 'Primary' }).getByRole('button').allInnerTexts()
+  expect(labels.join('|') === 'Explore Companies|My Profile & CV|My Resumes|Settings', `unexpected nav: ${labels}`)
+  expect(!(await page.content()).match(/kanban|follow-up|interview pipeline|applications/i), 'tracking UI visible')
 })
 
-console.log('\nDashboard & Cyberjaya companies')
-await step('empty dashboard: four honest zero metrics, no fake applications', async () => {
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
-  await page.getByRole('heading', { name: /Good (morning|afternoon|evening), Alex/ }).waitFor()
-  for (const l of ['Submitted', 'Active', 'Interviewing', 'Offers']) await page.getByText(l, { exact: true }).first().waitFor()
-  expect((await page.getByTestId('secondary-metrics').innerText()).includes('Response rate —'), 'response rate must be — with no submissions')
-  await page.getByText('No applications yet').waitFor()
-  await noHScroll(page, 'home'); await shot(page, '08-home-empty')
+console.log('\nExplorer')
+await step('location filter: Cyberjaya, Putrajaya, IOI Resort City, All', async () => {
+  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^Cyberjaya/ }).click(); await waitCount(page, N_CY)
+  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^Putrajaya/ }).click(); await waitCount(page, N_PJ)
+  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^IOI Resort City/ }).click(); await waitCount(page, N_IOI)
+  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: 'All', exact: true }).click(); await waitCount(page, N)
 })
-await step('companies: all 78 listed, fit meters for this profile, no live-vacancy claims', async () => {
-  await page.getByRole('button', { name: 'Companies', exact: true }).click()
-  await page.getByRole('heading', { name: 'Explore Cyberjaya' }).waitFor()
-  await page.getByText(/78 of 78 Cyberjaya companies/).waitFor()
-  await page.getByText('Pick a company to see why it fits').waitFor()                    // designed empty state, not a blank panel
-  expect((await page.locator('[data-testid="company-list"] [role="img"][aria-label^="Target fit"]').count()) > 20, 'fit rings render for scored companies')
-  await shot(page, '09-companies-empty-detail')
-  await page.getByRole('button', { name: /Start with your top match/ }).click()
-  await page.getByText('Target fit — how well this employer matches you').waitFor()
-  await shot(page, '10-companies-top-match')
+await step('sector, type, technical, allowance and evidence filters narrow the list', async () => {
+  const chips = page.getByRole('group', { name: 'Filters', exact: true })
+  await chips.getByRole('button', { name: /^Government/ }).click(); await waitCount(page, N_GOV)
+  await chips.getByRole('button', { name: /^Non-government/ }).click(); await waitCount(page, N_NON)
+  await chips.getByRole('button', { name: /^Non-government/ }).click(); await waitCount(page, N)
+  const tech = page.getByRole('group', { name: 'Technical areas' })
+  await tech.getByRole('button', { name: /^Cybersecurity/ }).click(); await page.waitForFunction(() => { const n = Number(document.querySelector('[data-testid="result-count"] .figure')?.textContent); return n > 0 && n < 400 }, null, { timeout: 8000 })
+  expect(await count(page) < N, 'technical chip narrows the list')
+  await tech.getByRole('button', { name: /^Cybersecurity/ }).click(); await waitCount(page, N)
+  await page.getByTestId('filters-toggle').click(); const f = page.getByTestId('filters')
+  await f.getByRole('button', { name: /^Confirmed unpaid/ }).click(); await waitCount(page, 2)
+  await f.getByRole('button', { name: /^Confirmed unpaid/ }).click()
+  expect(await f.getByRole('button', { name: /^Advertised opening/ }).isDisabled(), 'no organisation is a verified advertised opening, so that filter is disabled (0)')
+  await shot(page, '03-filters'); await waitCount(page, N); await page.getByTestId('filters-toggle').click()
 })
-await step('companies: selecting shows evidence-grounded detail; "How we scored this" explains the number', async () => {
-  await page.getByRole('button', { name: /CyberSecurity Malaysia/ }).first().click()
-  await page.getByRole('heading', { name: 'CyberSecurity Malaysia', level: 2 }).waitFor()
-  await page.getByText(/No current opening verified|historical/i).first().waitFor()
-  await page.getByText('info@cybersecurity.my').waitFor()
-  await page.getByRole('button', { name: 'How we scored this' }).click()
-  for (const l of ['Role alignment', 'Skills evidence', 'Project evidence', 'Opportunity route']) await page.getByText(l, { exact: false }).first().waitFor()
-  await page.getByText(/not a vacancy match, an ATS score or a prediction/i).waitFor()
-  await noHScroll(page, 'companies'); await shot(page, '11-company-detail')
+await step('search finds a company; the dossier shows everything on one page with honest labels', async () => {
+  await page.getByTestId('search').fill('NACSA'); await page.getByTestId('company-row').filter({ hasText: 'NACSA' }).first().click()
+  await page.getByTestId('dossier-title').waitFor(); const t = await page.getByTestId('dossier').innerText()
+  for (const h of ['Company information', 'Internship', 'Allowance', 'Contact', 'Research evidence', 'Email draft for Adam']) expect(t.includes(h), `missing section ${h}`)
+  expect(!/RM\s?0\b/.test(t), 'unknown allowance shown as RM0')
+  expect(/general rule, not confirmation/i.test(t), 'government policy must not read as employer confirmation')
+  expect(/Not verified/.test(t), 'missing fields use "Not verified"')
+  expect(!/undefined|null/.test(t), 'raw undefined/null leaked')
+  await shot(page, '04-dossier-government')
 })
-await step('companies: changing role focus re-ranks; shortlist works; search + sort are fast', async () => {
-  const first = async () => (await page.locator('[data-testid="company-list"] li[data-id] .font-display').first().innerText())
-  await page.getByLabel(/^Fit for Alex/).selectOption('cyber'); await page.waitForTimeout(500); const a = await first()
-  await page.getByLabel(/^Fit for Alex/).selectOption('cloud_devops'); await page.waitForTimeout(500); const b = await first()
-  expect(a !== b, `ranking should change with role focus (both "${a}")`)
-  await page.getByLabel(/^Fit for Alex/).selectOption('all')
-  await page.getByRole('button', { name: /Add CyberSecurity Malaysia to shortlist/ }).click()
-  await page.getByRole('button', { name: 'Shortlist', exact: true }).click()
-  await page.getByText(/^1 of 78 Cyberjaya/).waitFor()
-  await page.getByRole('button', { name: 'Shortlist', exact: true }).click()
-  const t0 = Date.now(); await page.getByLabel('Search companies').fill('deriv'); await page.getByText(/^1 of 78/).waitFor(); expect(Date.now() - t0 < 1500, 'search should be instant')
-  await page.getByLabel('Search companies').fill('')
-  await page.getByLabel('Sort by').selectOption('name'); await page.waitForTimeout(300)
-  await shot(page, '12-companies-shortlist')
+await step('copy buttons write real clipboard text: details, contact, subject, draft', async () => {
+  await page.getByTestId('copy-company').click(); await page.getByText('Copied', { exact: true }).first().waitFor()
+  let c = await clip(app); expect(/Agensi Keselamatan Siber Negara/.test(c) && /Allowance/.test(c) && !/undefined|null/.test(c), `company text: ${c.slice(0, 80)}`)
+  await page.getByTestId('copy-contact').click(); await page.waitForTimeout(150); c = await clip(app); expect(/info@nacsa\.gov\.my/.test(c), 'contact text has the email')
+  await page.getByRole('button', { name: 'Copy general email' }).click(); await page.waitForTimeout(150); expect((await clip(app)) === 'info@nacsa.gov.my', 'single-field copy')
+  await page.getByTestId('copy-draft').click(); await page.waitForTimeout(150); c = await clip(app)
+  expect(/^To: info@nacsa\.gov\.my\nSubject: /.test(c) && c.includes('Test Student One') && !c.includes('Test Student Two'), `draft text: ${c.slice(0, 120)}`)
+  expect(/I am writing to enquire about potential internship opportunities in .+ at /.test(c) && !/advertised|apply for the/.test(c), 'unadvertised enquiry wording'); expect(/Dear Hiring Manager,/.test(c) && /Yours sincerely,\nTest Student One\n/.test(c), 'standard structure and signature')
 })
-await step('keyboard: arrow keys move through the company list; focus ring is visible', async () => {
-  await page.getByLabel('Search companies').fill('')
-  const rows = page.locator('[data-testid="company-list"] button[data-row]'); await rows.first().focus()
-  await page.keyboard.press('ArrowDown'); const idx = await page.evaluate(() => Array.from(document.querySelectorAll('button[data-row]')).indexOf(document.activeElement as Element)); expect(idx === 1, `ArrowDown should focus the 2nd row (got ${idx})`)
-  await page.keyboard.press('Enter'); await page.getByRole('heading', { level: 2 }).first().waitFor()
+await step('draft is editable and a non-verified recipient is never guessed', async () => {
+  await page.getByLabel('Email body').fill('Edited by me'); await page.getByRole('button', { name: 'Copy body' }).click(); await page.waitForTimeout(150); expect((await clip(app)) === 'Edited by me', 'edited body copied')
+  await page.getByTestId('search').fill('DOF HQ'); await page.getByTestId('company-row').filter({ hasText: 'Perikanan' }).first().click(); await page.getByTestId('dossier-title').filter({ hasText: 'Perikanan' }).waitFor()
+  const t = await page.getByTestId('dossier').innerText(); expect(/Confirmed unpaid/.test(t), 'official-unpaid labelled')
 })
-await step('Prepare application: guided flow creates grounded drafts for a speculative enquiry — nothing sent, not Applied', async () => {
-  await page.getByLabel('Sort by').selectOption('best')
-  await page.getByRole('button', { name: /CyberSecurity Malaysia/ }).first().click()
-  await page.getByRole('button', { name: 'Prepare application' }).click()
-  await page.getByRole('dialog').getByText('Role & route').first().waitFor()
-  await page.getByText('Ask about internships').waitFor(); await shot(page, '13-prepare-1')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByText('Application readiness').waitFor(); await page.getByText('Resume will lead with').waitFor(); await page.waitForTimeout(900)
-  const op = await page.evaluate(() => { const el = document.querySelector('[role="dialog"] .anim-fade') as HTMLElement | null; return el ? getComputedStyle(el).opacity : 'none' }); expect(op === '1', `prepare step 2 content must be fully visible (opacity ${op})`)
-  await shot(page, '14-prepare-2')
-  await page.getByRole('button', { name: 'Create tailored drafts' }).click()
-  await page.getByText('Drafts are ready to review').waitFor({ timeout: 40000 }); await shot(page, '15-prepare-3')
-  await page.getByRole('button', { name: 'Review documents' }).click()
-  await page.getByText('ATS-safe layout').first().waitFor({ timeout: 30000 })
-  const hdr = await page.locator('header').first().innerText(); expect(!/\bApplied\b/.test(hdr.replace(/Not yet applied|Applied\?/g, '')) || /Ready to apply|Preparing/.test(hdr), `must not be Applied: ${hdr.slice(0, 80)}`)
-  await shot(page, '16-prepared-documents')
+await step('email draft follows the standard: structure, attachments, copy buttons, regenerate, restore and the mail app', async () => {
+  await page.getByTestId('search').fill('NACSA'); await page.getByTestId('company-row').filter({ hasText: 'NACSA' }).first().click(); await page.getByTestId('email-draft').waitFor()
+  const body = page.getByLabel('Email body'); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement)?.value.includes('Dear Hiring Manager'))
+  const t0 = await body.inputValue(); const L = t0.split('\n')
+  expect(L[0] === 'Dear Hiring Manager,' && L.at(-3) === 'Yours sincerely,' && L.at(-2) === 'Test Student One' && /one@example\.com/.test(L.at(-1)!), `structure: ${t0.slice(0, 80)}`)
+  expect(t0.split('\n\n').length === 5, 'greeting, three paragraphs, signature'); expect(/Please find attached my resume\./.test(t0), 'resume ticked by default')
+  expect(!/résumé/i.test(await page.locator('main').innerText()), 'accented spelling in the UI')
+  const subject = await page.locator('#draft-subject').inputValue(); expect(/^Internship Enquiry — .+ — Test Student One$/.test(subject), `subject: ${subject}`)
+  await page.getByTestId('attachments').getByRole('checkbox').first().uncheck(); await page.waitForFunction(() => !/attached/i.test((document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value))
+  expect(await page.getByTestId('attachments').getByRole('checkbox', { disabled: true }).count() >= 2, 'cover letter and referral letter offered as unavailable')
+  await page.getByTestId('copy-subject').click(); expect(await clipEventually(app, (t) => t === subject), 'copy subject')
+  await page.getByTestId('copy-recipient').click(); expect(await clipEventually(app, (t) => t === 'info@nacsa.gov.my'), 'copy recipient')
+  const bodyNow = await body.inputValue(); await page.getByTestId('copy-body').click(); expect(await clipEventually(app, (t) => t === bodyNow), 'copy body')
+  await page.getByTestId('copy-draft').click(); expect(await clipEventually(app, (t) => t.startsWith(`To: info@nacsa.gov.my\nSubject: ${subject}\n\nDear Hiring Manager,`)), 'copy whole email')
+  await body.fill('Edited by me'); await page.getByTestId('restore').click(); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value.startsWith('Dear Hiring Manager'))
+  await body.fill('Edited again'); await page.getByTestId('regen').click(); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value.startsWith('Dear Hiring Manager'))
+  expect(/not attached automatically/i.test(await page.getByTestId('attach-warning').innerText()), 'attachment warning visible')
+  await page.getByTestId('attachments').getByRole('checkbox').first().check(); await page.waitForFunction(() => /attached my resume/.test((document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value))
+  await page.getByTestId('open-mail').click(); await page.getByTestId('attach-checklist').waitFor()
+  expect(/still to attach/.test(await page.getByTestId('attach-status').innerText()), 'pending attachments flagged'); await page.getByTestId('attach-checklist').getByRole('checkbox').first().check(); expect(/All documents ticked/.test(await page.getByTestId('attach-status').innerText()), 'checklist completes')
+  await page.waitForTimeout(300); expect(/mailto:info@nacsa\.gov\.my\?subject=/.test(fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : ''), 'mail app opened with a mailto link')
+  await shot(page, '18-email-draft')
 })
-
-console.log('\nNew application → fit → documents')
-await step('paste a vacancy, analyze locally, review, save', async () => {
-  await page.getByRole('button', { name: 'New application' }).first().click()
-  await page.getByRole('textbox', { name: 'Job description', exact: true }).fill(JD_CYBER)
-  await shot(page, '07-new-application')
-  await page.getByRole('button', { name: 'Analyze role' }).click()
-  await page.getByText('Analysed on this computer with keyword rules (no AI)').waitFor()
-  await page.getByRole('heading', { name: 'Review & save' }).waitFor()
-  expect(await page.getByRole('textbox', { name: 'Role title', exact: true }).inputValue() === 'Cybersecurity Analyst Intern', 'title detected')
-  expect(await page.getByRole('textbox', { name: 'Company', exact: true }).inputValue() === 'Fixture Corp', 'company detected')
-  await shot(page, '08-new-application-review')
-  await page.getByRole('button', { name: 'Save application' }).click()
-  await page.getByTestId('app-title').waitFor()
+await step('compare two organisations in-page', async () => {
+  await page.getByTestId('search').fill(''); await waitCount(page, N)
+  const boxes = page.getByRole('checkbox', { name: /^Compare / }); await boxes.nth(0).check(); await boxes.nth(1).check()
+  await page.getByTestId('compare-btn').click(); await page.getByRole('dialog').waitFor(); await page.getByText(/No clear winner|Closest match/).waitFor()
+  await shot(page, '05-compare'); await page.keyboard.press('Escape'); await page.getByRole('dialog').waitFor({ state: 'detached' })
 })
-await step('overview: decision, evidence, honest pay card, heuristic disclaimer', async () => {
-  const rec = await page.getByTestId('recommendation').innerText()
-  expect(/Apply (now|with caveats)/.test(rec) && /NOT an ATS score/.test(rec), `recommendation text: ${rec.slice(0, 120)}`)
-  expect((await page.getByTestId('comp-card').innerText()).includes('RM1,500 per month'), 'allowance from the ad')
-  await page.getByText('Matched with proof').waitFor(); await page.getByText('Kubernetes').first().waitFor()
-  await noHScroll(page, 'overview'); await shot(page, '09-overview')
-})
-await step('generate documents → real PDF preview + passing checks', async () => {
-  await page.getByRole('tab', { name: 'Documents' }).click()
-  await page.getByTestId('generate-docs').click()
-  await page.getByText('ATS-safe layout').first().waitFor({ timeout: 30000 })
-  await page.waitForSelector('[data-testid="pdf-preview"][data-pages="1"]', { timeout: 20000 })
-  const canvases = await page.locator('[data-testid="pdf-preview"] canvas').count(); expect(canvases === 1, `one A4 canvas expected, got ${canvases}`)
-  const box = await page.locator('[data-testid="pdf-preview"] canvas').boundingBox(); expect(box && Math.abs(box.height / box.width - 1.4142) < 0.02, 'A4 aspect ratio')
-  await page.getByText('Fact check passed').first().waitFor()
-  await page.getByRole('button', { name: 'Export checks' }).click()
-  const q = await page.getByTestId('qa-list').innerText(); expect(!/failed/i.test(q) && q.includes('Standard headings'), 'QA list')
-  await shot(page, '10-documents-1440')
-  await page.locator('[data-testid="pdf-preview"]').screenshot({ path: path.join(SHOTS, '10b-resume-preview.png') })
-  await page.getByRole('button', { name: 'Cover letter', exact: true }).click(); await page.waitForTimeout(1200)
-  await page.locator('[data-testid="pdf-preview"]').screenshot({ path: path.join(SHOTS, '10c-letter-preview.png') })
-  await page.getByRole('button', { name: 'Resume', exact: true }).click(); await page.waitForTimeout(600)
-  const root = path.join(pickFolder, 'Career Hub', 'Profiles'); const files: string[] = []
-  const walk = (d: string) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : files.push(path.join(d, e.name))))
-  walk(root)
-  for (const f of [/Resume_.*_v01\.pdf$/, /Resume_.*_v01\.docx$/, /CoverLetter_.*_v01\.pdf$/, /CoverLetter_.*_v01\.docx$/, /job-description\.txt$/, /fact-bank\.json$/]) expect(files.some((x) => f.test(x)), `missing file ${f}`)
-  fs.copyFileSync(files.find((f) => /Resume_.*_v01\.pdf$/.test(f))!, path.join(OUT, 'sample-resume.pdf')); fs.copyFileSync(files.find((f) => /CoverLetter_.*_v01\.pdf$/.test(f))!, path.join(OUT, 'sample-cover-letter.pdf'))
-})
-await step('editing: diff view, revert, and an invented claim is blocked', async () => {
-  const bullet = page.getByLabel(/Network Traffic Anomaly Detector bullet 1/)
-  const orig = await bullet.inputValue()
-  await bullet.fill('Built a packet pipeline on Kubernetes that cut detection time by 65%.')
-  await page.getByRole('button', { name: 'Save version' }).click()
-  await page.getByText('Blocked by the fact check').waitFor()
-  const msg = await page.getByRole('alert').filter({ hasText: 'Blocked by the fact check' }).innerText(); expect(msg.includes('Kubernetes') && msg.includes('65%'), 'issues listed')
-  await page.getByRole('button', { name: 'Diff vs master' }).click(); await page.getByText('Edited').first().waitFor()
-  await page.getByRole('button', { name: 'Revert this bullet to your master wording' }).first().click()
-  expect(await bullet.inputValue() === orig, 'revert restores the master wording')
-  await bullet.fill(orig.replace(/\.$/, '') + ' and documented the results.'); await page.getByRole('button', { name: 'Save version' }).click()
-  await page.getByText(/Saved as version 2/).waitFor({ timeout: 20000 })
-  await shot(page, '11-documents-edited-diff')
-})
-await step('email: real attachments, valid .eml saved, nothing marked as sent', async () => {
-  await page.getByRole('tab', { name: 'Email' }).click()
-  await page.getByText('Attachments', { exact: false }).first().waitFor()
-  const chips = page.getByRole('checkbox', { name: /Resume_.*\.pdf/ }); await chips.waitFor(); expect(await chips.getAttribute('aria-checked') === 'true', 'resume attached by default')
-  expect(/Attached: resume \(PDF\) and cover letter \(PDF\)/.test(await page.getByLabel('Message').inputValue()), 'attachment line')
-  await page.getByRole('checkbox', { name: /CoverLetter_.*\.pdf/ }).click()
-  await page.waitForFunction(() => /Attached: resume \(PDF\)\./.test((document.querySelector('textarea[id]') as HTMLTextAreaElement | null)?.value ?? ''), null, { timeout: 5000 }).catch(() => {})
-  expect(/Attached: resume \(PDF\)\./.test(await page.getByLabel('Message').inputValue()), 'attachment line follows the toggle')
-  await page.getByRole('checkbox', { name: /CoverLetter_.*\.pdf/ }).click()
-  await shot(page, '12-email')
-  await page.getByTestId('save-eml').click()
-  await page.getByText('Draft saved — not sent').waitFor({ timeout: 15000 })
-  const eml = (function find(d: string): string[] { return fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? find(path.join(d, e.name)) : e.name.endsWith('.eml') ? [path.join(d, e.name)] : [])) })(pickFolder)[0]
-  expect(!!eml, '.eml exists'); const raw = fs.readFileSync(eml, 'latin1'); expect(/Content-Type: multipart\/mixed/.test(raw) && (raw.match(/Content-Disposition: attachment/g) ?? []).length === 2, 'two attachments in MIME')
-  await page.getByRole('button', { name: 'Open in Mail', exact: true }).click(); await page.waitForTimeout(300)
-  expect(fs.readFileSync(logFile, 'utf8').includes('.eml'), 'OS open was invoked for the .eml')
-  await page.getByRole('button', { name: 'Open attachments folder' }).click(); await page.waitForTimeout(300)
-  expect(/openPath\t.*Applications/.test(fs.readFileSync(logFile, 'utf8')), 'folder open targets the application folder')
-})
-await step('status stays Ready until the user confirms; Mark as applied needs confirmation', async () => {
-  expect((await page.locator('header').first().innerText()).includes('Ready to apply'), 'Ready to apply, not Applied')
-  expect(!(await page.locator('header').first().innerText()).includes('Applied\nNot yet') === true || true, '')
-  await page.getByRole('tab', { name: 'Timeline' }).click()
-  await page.getByRole('button', { name: 'Mark as applied…' }).click()
-  const dlg = page.getByRole('dialog'); expect(await dlg.getByRole('button', { name: 'Mark as applied' }).isDisabled(), 'disabled until confirmed')
-  await dlg.getByRole('checkbox', { name: /I confirm I submitted/ }).click()
-  await dlg.getByRole('button', { name: 'Mark as applied' }).click()
-  await page.getByText('Applied — confirmed by you.').waitFor()
-  await page.getByText('Next follow-up').waitFor(); await shot(page, '13-timeline')
+await step('the selected person’s resume opens beside the company', async () => {
+  await page.getByTestId('open-my-doc').click(); await page.getByRole('dialog').waitFor(); await page.waitForSelector('[data-testid="pdf-preview"][data-pages="1"]', { timeout: 15000 })
+  await page.keyboard.press('Escape')
 })
 
-console.log('\nBoard, persistence, theme, responsive')
-await step('second application (speculative) + board drag never submits silently', async () => {
-  await page.getByRole('button', { name: 'New application' }).first().click()
-  await page.getByRole('tab', { name: 'Choose Cyberjaya company' }).click()
-  await page.getByLabel('Search companies').fill('Syntx')
-  await page.getByRole('button', { name: /Syntx Sdn Bhd/ }).click()
-  await page.getByRole('button', { name: 'Create speculative outreach' }).click()
-  await page.getByTestId('app-title').waitFor(); await page.getByText('Speculative enquiry').first().waitFor()
-  await page.getByRole('button', { name: 'Applications', exact: true }).click()
-  await page.getByRole('button', { name: 'Board' }).click()
-  const card = page.locator('[data-card]').filter({ hasText: 'Syntx' }); await card.waitFor()
-  await card.dragTo(page.locator('[data-col="applied"]'))
-  await page.getByRole('dialog', { name: 'Mark as applied' }).waitFor()          // asks for confirmation instead of moving
-  await page.getByRole('button', { name: 'Cancel' }).click()
-  expect(await page.locator('[data-col="to_apply"]').filter({ hasText: 'Syntx' }).count() === 1, 'card stayed in To apply')
-  await card.dragTo(page.locator('[data-col="closed"]')); await page.getByRole('button', { name: 'Not pursued' }).click()
-  await page.locator('[data-col="closed"]').filter({ hasText: 'Syntx' }).waitFor()
-  await shot(page, '14-board')
+console.log('\nProfiles, CV and resumes')
+await step('Akif’s drafts use Akif’s details only; Adam’s are untouched', async () => {
+  await page.getByTestId('profile-chip').click(); await page.getByTestId('pick-akif').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor(); await waitCount(page, N)
+  await page.getByTestId('search').fill('NACSA'); await page.getByTestId('company-row').filter({ hasText: 'NACSA' }).first().click(); await page.getByTestId('dossier-title').waitFor()
+  await page.getByTestId('copy-draft').click(); await page.waitForTimeout(150); const c = await clip(app)
+  expect(c.includes('Test Student Two') && !c.includes('Test Student One'), 'wrong student in draft'); expect(!/proposed|benchmark/i.test(c) || /proposed/.test(c), 'FYP wording')
+  expect((await page.getByTestId('dossier').innerText()).includes('No resume linked for Akif'), 'Akif has no resume; optional banner shown')
+  await shot(page, '06-akif-explorer')
 })
-await step('dashboard reflects only the confirmed submission', async () => {
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
-  await page.getByTestId('secondary-metrics').waitFor()
-  const t = await page.locator('section[aria-label="Key numbers"]').innerText(); expect(/Submitted\s*\n?\s*1/.test(t) && /Active\s*\n?\s*1/.test(t), `metrics: ${t.replace(/\n/g, ' ')}`)
-  expect((await page.getByTestId('secondary-metrics').innerText()).includes('Response rate 0%'), 'response rate = responses / submitted')
-  await shot(page, '15-home-populated')
+await step('profile page shows structured info immediately; no CV needed', async () => {
+  await nav(page, 'My Profile & CV'); await page.getByTestId('profile-name').waitFor(); const t = await page.locator('main').innerText()
+  expect(t.includes('Test Student Two') && t.includes('Cloud Scanner') && /Proposed/.test(t) && !t.includes('Test Student One'), 'akif profile content')
+  await page.getByText('No CV or resume linked yet').waitFor()
+  await shot(page, '07-profile-no-cv')
 })
-await step('closing and reopening the app keeps everything', async () => {
-  await app.close(); ({ app, page } = await launch()); await resize(app, 1440, 900)
-  await page.getByRole('heading', { name: 'Explore Cyberjaya' }).waitFor()
-  await page.getByRole('button', { name: 'Home', exact: true }).click(); await page.getByRole('heading', { name: /Good (morning|afternoon|evening), Alex/ }).waitFor()
-  await page.getByText('Fixture Corp').first().waitFor(); await page.getByText('Applied').first().waitFor()
-  await page.getByText('Fixture Corp').first().click(); await page.getByRole('tab', { name: 'Documents' }).click()
-  await page.getByRole('combobox', { name: 'Version' }).waitFor(); expect((await page.getByRole('combobox', { name: 'Version' }).innerText()).includes('v2'), 'both versions persisted')
-  await page.waitForSelector('[data-testid="pdf-preview"][data-pages="1"]'); await page.getByRole('tab', { name: 'Timeline' }).click(); await page.getByText('Applied — confirmed by you.').waitFor()
+await step('Adam’s profile previews the linked CV for real', async () => {
+  await page.getByRole('button', { name: /Active profile Akif/ }).click(); await page.getByTestId('pick-adam').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+  await nav(page, 'My Profile & CV'); await page.getByTestId('profile-name').waitFor(); await page.waitForSelector('[data-testid="pdf-preview"][data-pages="1"]', { timeout: 15000 })
+  expect((await page.locator('main').innerText()).includes('Test Student One'), 'adam profile'); await shot(page, '08-profile-cv-preview')
 })
-await step('deleting an output file shows a recovery banner, not a crash', async () => {
-  const pdf = (function find(d: string): string[] { return fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? find(path.join(d, e.name)) : /Resume_.*_v02\.pdf$/.test(e.name) ? [path.join(d, e.name)] : [])) })(pickFolder)[0]
-  fs.renameSync(pdf, pdf + '.moved')
-  try {
-    await page.getByRole('tab', { name: 'Overview' }).click(); await page.getByRole('tab', { name: 'Documents' }).click()
-    await page.getByText('Some saved files are missing or changed on disk').waitFor({ timeout: 8000 }); await shot(page, '16-missing-file-recovery')
-  } finally { fs.renameSync(pdf + '.moved', pdf) }
+await step('My Resumes: upload, duplicate refused, preview, version shown', async () => {
+  await nav(page, 'My Resumes'); await page.getByTestId('doc-card').first().waitFor()
+  expect(await page.getByTestId('doc-card').count() === 1, 'seeded resume present')
+  await page.getByTestId('doc-add').click(); await page.getByText(/Saved as version 1/).waitFor(); expect(await page.getByTestId('doc-card').count() === 2, 'second resume added')
+  await page.getByTestId('doc-add').click(); await page.getByText(/already saved/).first().waitFor()
+  await page.getByRole('button', { name: /Add a new version of/ }).first().click(); await page.getByText(/already saved|Saved as version 2/).first().waitFor()
+  await shot(page, '09-my-resumes')
 })
-await step('settings: dark theme applies and persists; reduced motion is honoured', async () => {
-  await page.getByRole('button', { name: 'Settings', exact: true }).click()
-  await page.getByLabel('Theme').selectOption('dark'); await page.waitForTimeout(300)
-  expect(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'data-theme=dark')
-  await page.getByText('Career Hub folder:').waitFor(); await shot(page, '17-settings-dark')
-  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.getByRole('button', { name: 'Home', exact: true }).click()
-  const dur = await page.evaluate(() => getComputedStyle(document.querySelector('main > div') as HTMLElement).animationDuration); expect(parseFloat(dur) < 0.01, `animation duration under reduced motion: ${dur}`)
-  await page.emulateMedia({ reducedMotion: 'no-preference' }); await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByLabel('Theme').selectOption('light')
+
+
+console.log('\nMatch, tailoring and master resume')
+const sha = (p: string) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')
+const docDir = (id: string) => path.join(userData, 'viewer', 'documents', id)
+const adamDocs = () => fs.existsSync(docDir('adam')) ? fs.readdirSync(docDir('adam')).map((n) => path.join(docDir('adam'), n)).sort() : []
+let adamDeriv = 0
+await step('every company shows a live match percentage, and sorting and view modes work', async () => {
+  await nav(page, 'Explore Companies'); await page.getByTestId('search').fill('')
+  await page.getByTestId('search').fill('Deriv'); const row = page.getByTestId('company-list').locator('li').filter({ hasText: 'Deriv' }).first(); await row.getByTestId('match-ring').waitFor()
+  adamDeriv = Number(await row.getByTestId('match-ring').getAttribute('data-score')); expect(adamDeriv > 0 && adamDeriv <= 100, `score ${adamDeriv}`)
+  expect((await row.getByTestId('match-ring').getAttribute('aria-label'))!.includes('percent'), 'ring has a text equivalent')
+  await page.getByTestId('search').fill(''); await waitCount(page, N)
+  await page.getByTestId('sort').selectOption('name'); await page.waitForTimeout(300)
+  const names = await page.getByTestId('company-row').evaluateAll((els) => els.slice(0, 6).map((e) => (e.textContent ?? '').trim()))
+  expect(names.length >= 2, 'rows listed'); await page.getByTestId('sort').selectOption('match'); await page.waitForTimeout(300)
+  const scores = await page.getByTestId('company-list').getByTestId('match-ring').evaluateAll((els) => els.slice(0, 8).map((e) => Number(e.getAttribute('data-score'))))
+  expect(scores.every((v, i) => i === 0 || scores[i - 1] >= v), `best match first: ${scores}`)
+  await shot(page, '12-explorer-cards'); await page.getByRole('button', { name: 'Dense research list' }).click(); await page.waitForTimeout(300); await shot(page, '13-explorer-dense')
+  await page.getByRole('button', { name: 'Visual cards' }).click()
 })
-await step('keyboard: tabs move with arrow keys; modal traps focus and closes on Escape', async () => {
-  await page.getByRole('button', { name: 'Applications', exact: true }).click(); await page.getByText('Fixture Corp').first().click()
-  await page.getByRole('tab', { name: 'Overview' }).focus(); await page.keyboard.press('ArrowRight')
-  expect(await page.getByRole('tab', { name: 'Documents' }).getAttribute('aria-selected') === 'true', 'arrow moves tab')
-  await page.getByRole('button', { name: 'New application' }).first().click(); await page.getByRole('dialog').waitFor()
-  for (let i = 0; i < 25; i++) await page.keyboard.press('Tab')
-  expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), 'focus stays inside the dialog')
+await step('the score is explained and recalculates when the role changes', async () => {
+  await page.getByTestId('search').fill('Deriv'); await page.getByTestId('company-row').filter({ hasText: 'Deriv' }).first().click(); await page.getByTestId('match-panel').waitFor()
+  await page.getByTestId('match-detail').waitFor(); const t = await page.getByTestId('match-detail').innerText()
+  for (const h of ['How the score is built', 'Relevant technical skills', 'Evidence confidence', 'Not verified']) expect(t.includes(h), `missing ${h}`)
+  expect(/not a vacancy match|No job description/i.test(await page.getByTestId('match-panel').innerText()), 'states it is an estimate')
+  const ring = page.getByTestId('match-panel').getByTestId('match-ring'); const before = await ring.getAttribute('data-score')
+  await page.getByTestId('role-select').selectOption('CYBERSECURITY'); await page.waitForFunction((b) => document.querySelector('[data-testid="match-panel"] [data-testid="match-ring"]')?.getAttribute('data-score') !== b, before, { timeout: 8000 })
+  await shot(page, '14-match-breakdown'); await page.getByTestId('role-select').selectOption('DATA_ANALYTICS')
+})
+await step('Adam: Tailor My CV makes a labelled draft, shows what changed, approves to a real PDF, and leaves his resume untouched', async () => {
+  const before = adamDocs().map(sha)
+  await page.getByTestId('tailor-cv').click(); await page.getByTestId('cv-studio').waitFor()
+  expect(/No Specific Vacancy/.test(await page.getByTestId('cv-label').innerText()), 'vacancy label')
+  await page.getByTestId('cv-diff').waitFor(); await page.getByTestId('presentation').waitFor(); await page.waitForSelector('[data-testid="pdf-preview"]', { timeout: 15000 })
+  expect(!(await page.getByTestId('cv-studio').innerText()).match(/ATS[^.\n]{0,24}\d+\s?%|\d+\s?%[^.\n]{0,24}ATS/i), 'no fake ATS probability')
+  await shot(page, '15-cv-studio')
+  await page.getByTestId('cv-approve').click(); await page.getByText(/Approved version/).first().waitFor({ timeout: 15000 })
+  const dir = path.join(userData, 'viewer', 'cv', 'adam'); const pdfs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.pdf')) : []
+  expect(pdfs.length === 1 && /^Adam_Deriv.*_CV\.pdf$/.test(pdfs[0]), `approved file: ${pdfs}`)
+  const buf = fs.readFileSync(path.join(dir, pdfs[0])); expect(buf.subarray(0, 5).toString() === '%PDF-', 'real PDF')
+  expect(JSON.stringify(adamDocs().map(sha)) === JSON.stringify(before), 'Adam resume bytes changed')
   await page.keyboard.press('Escape'); await page.getByRole('dialog').waitFor({ state: 'detached' })
 })
-
-for (const [w, h, tag] of [[1024, 768, 'laptop'], [390, 844, 'narrow']] as const) {
-  await step(`responsive ${w}px: no horizontal scroll, key screens render`, async () => {
-    await resize(app, w, h); await page.waitForTimeout(300)
-    await page.getByRole('button', { name: 'Home', exact: true }).click(); await noHScroll(page, `home@${w}`); await shot(page, `20-${tag}-home`)
-    await page.getByRole('button', { name: 'Companies', exact: true }).click(); await page.getByRole('heading', { name: 'Explore Cyberjaya' }).waitFor(); await noHScroll(page, `companies@${w}`); await shot(page, `21-${tag}-companies`)
-    await page.getByRole('button', { name: 'Applications', exact: true }).click(); await page.getByText('Fixture Corp').first().click()
-    await noHScroll(page, `detail@${w}`); await shot(page, `22-${tag}-overview`)
-    await page.getByRole('tab', { name: 'Documents' }).click(); await page.waitForSelector('[data-testid="pdf-preview"][data-pages="1"]'); await noHScroll(page, `documents@${w}`); await shot(page, `23-${tag}-documents`)
-    await page.getByRole('tab', { name: 'Email' }).click(); await page.getByLabel('Message').waitFor(); await noHScroll(page, `email@${w}`); await shot(page, `24-${tag}-email`)
-    await page.getByRole('button', { name: 'My Profile', exact: true }).click(); await page.getByRole('heading', { name: 'Target roles' }).waitFor(); await noHScroll(page, `profile@${w}`); await shot(page, `25-${tag}-profile`)
-  })
-}
-
-console.log('\nIsolation')
-await step('a second profile starts empty and cannot see the first profile’s data', async () => {
-  await resize(app, 1440, 900)
-  await page.getByRole('button', { name: /Alex Tester/ }).click(); await page.getByRole('menuitem', { name: 'Add another profile' }).click()
-  await page.getByLabel('New profile name').fill('Sam Friend'); await page.getByRole('button', { name: 'Add', exact: true }).click()
-  await page.getByRole('heading', { name: /Let’s start with you/ }).waitFor()
-  expect(!(await page.content()).includes('Fixture Corp'), 'no cross-profile leakage')
+await step('Akif: different score for the same company; his master resume is prepared, reviewed, approved; original kept', async () => {
+  await page.getByTestId('profile-chip').click(); await page.getByTestId('pick-akif').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+  await page.getByTestId('search').fill('Deriv'); const row = page.getByTestId('company-list').locator('li').filter({ hasText: 'Deriv' }).first(); await row.getByTestId('match-ring').waitFor()
+  const akif = Number(await row.getByTestId('match-ring').getAttribute('data-score')); expect(akif !== adamDeriv, `scores should differ per student (${akif} vs ${adamDeriv})`)
+  await nav(page, 'My Resumes'); await page.getByTestId('prepare-master').click(); await page.getByTestId('master-draft').waitFor(); await page.waitForSelector('[data-testid="pdf-preview"]', { timeout: 15000 })
+  expect(await page.getByTestId('doc-card').count() === 0, 'draft is not a document yet'); await shot(page, '16-akif-master-draft')
+  await page.getByTestId('approve-master').click(); await page.getByText(/current master/i).first().waitFor({ timeout: 15000 })
+  await page.getByTestId('doc-card').first().waitFor(); expect(await page.getByTestId('doc-card').count() === 1, 'approved master is a new document')
+  const hasAdamPrepare = false; expect(!hasAdamPrepare, 'n/a')
+  await page.getByTestId('profile-chip').click(); await page.getByTestId('pick-adam').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+  await nav(page, 'My Resumes'); await page.getByTestId('doc-card').first().waitFor()
+  expect(await page.getByTestId('prepare-master').count() === 0, 'no master refresh offered for Adam'); expect(/kept exactly as saved/.test(await page.getByTestId('master-panel').innerText()), 'Adam notice')
+  await shot(page, '17-adam-resumes')
 })
+
+console.log('\nSettings and persistence')
+await step('dark mode and reduced motion apply', async () => {
+  await nav(page, 'Settings'); await page.getByLabel('Theme').selectOption('dark')
+  expect(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'dark theme'); await shot(page, '10-settings-dark')
+  await page.getByLabel('Motion').selectOption('reduced'); await nav(page, 'Explore Companies'); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+  const dur = await page.evaluate(() => getComputedStyle(document.querySelector('main') as HTMLElement).animationDuration); expect(parseFloat(dur) < 0.01, `reduced motion ignored (${dur})`)
+  await page.getByLabel('Motion').count()
+})
+await step('update company list from a workbook: merged, idempotent, no database', async () => {
+  if (!(!!REAL_WORKBOOK && fs.existsSync(REAL_WORKBOOK))) { console.log('      (skipped: research workbook not present on this machine)'); return }
+  await nav(page, 'Settings'); await page.getByTestId('catalog-pick').click(); await page.getByTestId('catalog-preview').waitFor()
+  expect(/\d+ organisations found/.test(await page.getByTestId('catalog-preview').innerText()) && /0 new/.test(await page.getByTestId('catalog-preview').innerText()), 'preview says nothing new')
+  await page.getByTestId('catalog-apply').click(); await page.getByText(/Company list updated/).first().waitFor()
+  expect(!fs.existsSync(path.join(userData, 'careerhub.db')), 'db created'); await shot(page, '11-settings-update')
+})
+await step('restart keeps profiles, documents and the updated company list', async () => {
+  await app.close(); ({ app, page } = await launch()); await resize(app, 1440, 900)
+  await page.getByRole('heading', { name: /Who’s exploring today/ }).waitFor(); await page.getByTestId('pick-adam').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor(); await waitCount(page, N)
+  await nav(page, 'My Resumes'); await page.getByTestId('doc-card').first().waitFor(); expect(await page.getByTestId('doc-card').count() === 2, 'documents persisted')
+  expect(!fs.existsSync(path.join(userData, 'careerhub.db')), 'no database after restart')
+})
+
+console.log('\nVisual checks at three sizes (theme from settings: dark persisted in this session)')
+for (const [w, h] of [[1440, 900], [1280, 800], [1024, 768]] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    await step(`${w}×${h} ${theme}: explorer, dossier, profile, resumes, settings fit without horizontal scroll`, async () => {
+      await resize(app, w, h); await page.waitForTimeout(250)
+      await nav(page, 'Settings'); await page.getByLabel('Theme').selectOption(theme)
+      await nav(page, 'Explore Companies'); await page.getByTestId('search').fill('Deriv'); await page.getByTestId('company-row').first().click(); await page.getByTestId('dossier-title').waitFor()
+      await noHScroll(page, `explorer@${w}`); await shot(page, `20-explorer-${w}-${theme}`)
+      await nav(page, 'My Profile & CV'); await page.getByTestId('profile-name').waitFor(); await noHScroll(page, `profile@${w}`); if (w === 1440) await shot(page, `21-profile-${w}-${theme}`)
+      await nav(page, 'My Resumes'); await page.getByTestId('doc-card').first().waitFor(); await noHScroll(page, `resumes@${w}`); if (w !== 1280) await shot(page, `22-resumes-${w}-${theme}`)
+      await nav(page, 'Settings'); await noHScroll(page, `settings@${w}`)
+    })
+  }
+}
 
 await app.close()
 fs.writeFileSync(path.join(OUT, 'e2e-results.json'), JSON.stringify({ results, errors }, null, 2))

@@ -1,3 +1,5 @@
+> **Superseded (Career Hub 3.0).** The product is now a two-person viewer: profile picker, company explorer with copy tools, CV / resume viewer and offline email drafts. See README.md. The plan below describes the earlier tracker app.
+
 # Implementation plan & log
 
 ## Architecture decision (made once, early)

@@ -5,3 +5,8 @@ release/
 *.log
 .env
 test-output/
+graphify-out/
+
+# Private local data (profiles, personal documents)
+private/
+data/catalog.json.*.bak

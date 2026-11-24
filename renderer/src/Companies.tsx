@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowRight, Building2, Check, ChevronDown, Copy, ExternalLink, Info, MapPin, MoreHorizontal, Plus, Search, SlidersHorizontal, Sparkles, Star, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Building2, Check, ChevronDown, Copy, ExternalLink, Info, MapPin, MoreHorizontal, Plus, Scale, Search, SlidersHorizontal, Sparkles, Star, Upload } from 'lucide-react'
 import { api, errMsg, STATUS_EXPLAIN } from './api'
 import { roleName, useApp } from './ctx'
+import { AllowanceCard } from './Allowance'
+import { CompareModal } from './Compare'
 import { Disclosure, FitBar, ScoreRing, bandIcon, bandOf } from './kit'
 import { Banner, Button, Chip, Empty, Field, Input, Modal, Select, Spinner, Textarea, cx, useToast } from './ui'
 
@@ -26,6 +28,9 @@ export function CompaniesPage() {
   const [sort, setSort] = useState<(typeof SORTS)[number][0]>('best')
   const [role, setRole] = useState(''); const [owner, setOwner] = useState(''); const [status, setStatus] = useState(''); const [route, setRoute] = useState('')
   const [starred, setStarred] = useState(false)
+  const [city, setCity] = useState<'' | 'Cyberjaya' | 'Putrajaya'>('')
+  const [sector, setSector] = useState(''); const [klass, setKlass] = useState(''); const [evid, setEvid] = useState(''); const [allow, setAllow] = useState(''); const [minAllow, setMinAllow] = useState('')
+  const [picked, setPicked] = useState<string[]>([]); const [comparing, setComparing] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sel, setSel] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -38,11 +43,12 @@ export function CompaniesPage() {
   // One call returns all companies with a fit computed for THIS profile and focus. Switching profile/focus recomputes; nothing is cached across profiles.
   useEffect(() => {
     let alive = true
-    api('companies.list', { focusRoles }).then((r) => { if (alive) { setRows(r); setError(null) } }).catch((e) => alive && setError(errMsg(e)))
+    api('companies.list', { focusRoles, city: city || undefined, sector: sector || undefined, classes: klass ? [klass] : undefined, internshipEvidence: evid ? [evid] : undefined, allowanceGrades: allow ? [allow] : undefined, minAllowance: minAllow ? Number(minAllow) : undefined }).then((r) => { if (alive) { setRows(r); setError(null) } }).catch((e) => alive && setError(errMsg(e)))
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, tick, p.profile_id])
-  useEffect(() => { setFocus('all'); setSel(null) }, [p.profile_id])
+  }, [focus, tick, p.profile_id, city, sector, klass, evid, allow, minAllow])
+  useEffect(() => { setFocus('all'); setSel(null); setPicked([]) }, [p.profile_id])
+  const togglePick = (id: string) => setPicked((x) => x.includes(id) ? x.filter((i) => i !== id) : x.length >= 4 ? x : [...x, id])
 
   const total = rows?.length ?? 0
   const view = useMemo(() => {
@@ -58,7 +64,7 @@ export function CompaniesPage() {
   }, [rows, q, role, owner, status, route, starred, sort])
   const scored = (rows ?? []).some((c) => c.fit.status === 'scored')
   const topMatch = useMemo(() => (rows ?? []).filter((c) => c.fit.status === 'scored').sort((a, b) => b.fit.score - a.fit.score || a.name.localeCompare(b.name))[0] ?? view[0], [rows, view])
-  const activeFilters = [role, owner, status, route].filter(Boolean).length
+  const activeFilters = [role, owner, status, route, sector, klass, evid, allow, minAllow].filter(Boolean).length
   const selected = view.find((c) => c.company_id === sel) ?? (rows ?? []).find((c) => c.company_id === sel) ?? null
 
   const select = (id: string, scroll = false) => {
@@ -86,9 +92,13 @@ export function CompaniesPage() {
       <header className="shrink-0 pb-4">
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
-            <p className="eyebrow">Cyberjaya, Malaysia</p>
-            <h1 className="page-title mt-1">Explore Cyberjaya</h1>
-            <p className="mt-1.5 text-muted">Find the right companies for your role, then prepare a tailored application.</p>
+            <p className="eyebrow">{city || 'Cyberjaya + Putrajaya'}, Malaysia</p>
+            <h1 className="page-title mt-1">Explore employers</h1>
+            <p className="mt-1.5 text-muted">Find the right employers for your role, check the evidence, then prepare a tailored application.</p>
+            <div role="group" aria-label="Location" className="mt-3 inline-flex rounded-lg border border-line bg-surface2 p-0.5">
+              {([['Cyberjaya', 'Cyberjaya'], ['Putrajaya', 'Putrajaya'], ['', 'All locations']] as const).map(([k, l]) => (
+                <button key={l} aria-pressed={city === k} onClick={() => setCity(k as any)} className={cx('rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150', city === k ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink')}>{l}</button>))}
+            </div>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <Field label={`Fit for ${p.name.split(' ')[0]}`} className="w-[210px]">{(id) => (
@@ -100,7 +110,7 @@ export function CompaniesPage() {
               <Button aria-haspopup="menu" aria-expanded={menu} aria-label="More actions" onClick={() => setMenu(!menu)}><MoreHorizontal size={16} aria-hidden /></Button>
               {menu && <div role="menu" className="card anim-fade absolute right-0 z-30 mt-1 w-56 p-1 shadow-lg" onMouseLeave={() => setMenu(false)}>
                 <button role="menuitem" onClick={() => { setMenu(false); setAdding(true) }} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface2"><Plus size={14} aria-hidden />Add a company</button>
-                <button role="menuitem" onClick={importFile} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface2"><Upload size={14} aria-hidden />Import company spreadsheet</button>
+                <button role="menuitem" onClick={importFile} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface2"><Upload size={14} aria-hidden />Import company spreadsheet (legacy)</button>
               </div>}
             </div>
           </div>
@@ -111,6 +121,7 @@ export function CompaniesPage() {
           <Select aria-label="Sort by" className="w-auto" value={sort} onChange={(e) => setSort(e.target.value as any)}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
           <Button aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} icon={<SlidersHorizontal size={15} aria-hidden />}>Filters{activeFilters > 0 && <span className="ml-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] text-on-primary">{activeFilters}</span>}</Button>
           <Button aria-pressed={starred} onClick={() => setStarred(!starred)} className={cx(starred && '!border-primary !bg-primary-soft !text-primary')} icon={<Star size={15} className={cx(starred && 'fill-current')} aria-hidden />}>Shortlist</Button>
+          <Button disabled={picked.length < 2} onClick={() => setComparing(true)} icon={<Scale size={15} aria-hidden />}>Compare{picked.length ? ` (${picked.length})` : ''}</Button>
         </div>
         {filtersOpen && (
           <div className="card anim-fade mt-2 grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -118,11 +129,16 @@ export function CompaniesPage() {
             <Field label="Employer type">{(id) => <Select id={id} value={owner} onChange={(e) => setOwner(e.target.value)}><option value="">Any</option><option value="MNC">Multinational</option><option value="GLC">Government-linked</option><option value="PLC">Listed company</option><option value="Government">Government / agency</option><option value="Private">Private Malaysian</option><option value="University">University</option></Select>}</Field>
             <Field label="Opportunity status">{(id) => <Select id={id} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Any</option>{Object.entries(STATUS_EXPLAIN).filter(([k]) => k !== 'NEEDS_VERIFICATION').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}</Field>
             <Field label="How to apply">{(id) => <Select id={id} value={route} onChange={(e) => setRoute(e.target.value)}><option value="">Any</option><option value="careers">Has a careers page</option><option value="email">Has a public email</option></Select>}</Field>
-            {activeFilters > 0 && <div className="sm:col-span-2 lg:col-span-4"><button onClick={() => { setRole(''); setOwner(''); setStatus(''); setRoute('') }} className="text-sm font-medium text-primary hover:underline">Clear filters</button></div>}
+            <Field label="Sector">{(id) => <Select id={id} value={sector} onChange={(e) => setSector(e.target.value)}><option value="">Any</option><option value="GOVERNMENT">Government / public sector</option><option value="NON_GOVERNMENT">Non-government</option></Select>}</Field>
+            <Field label="Organisation class">{(id) => <Select id={id} value={klass} onChange={(e) => setKlass(e.target.value)}><option value="">Any</option>{[['MINISTRY', 'Ministry'], ['DEPARTMENT', 'Department'], ['AGENCY', 'Agency'], ['STATUTORY_BODY', 'Statutory body'], ['COMMISSION', 'Commission'], ['PUBLIC_INSTITUTION', 'Public institution'], ['GLC', 'GLC'], ['MNC', 'MNC'], ['PLC', 'PLC'], ['PRIVATE', 'Private company'], ['UNIVERSITY_RESEARCH', 'University / research']].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>}</Field>
+            <Field label="Internship evidence">{(id) => <Select id={id} value={evid} onChange={(e) => setEvid(e.target.value)}><option value="">Any</option><option value="CONFIRMED_PROGRAMME">Confirmed programme</option><option value="ACTIVE_OPENING">Active confirmed opening</option><option value="HISTORICAL">Historical evidence</option><option value="DIRECT_OUTREACH">Direct-outreach candidate</option><option value="UNKNOWN">Unknown</option></Select>}</Field>
+            <Field label="Allowance evidence">{(id) => <Select id={id} value={allow} onChange={(e) => setAllow(e.target.value)}><option value="">Any</option><option value="A1">Current verified</option><option value="A2">Historical verified</option><option value="A3">Third-party reported</option><option value="A4">Estimated</option><option value="A5">Not confirmed</option><option value="A6">Confirmed unpaid</option></Select>}</Field>
+            <Field label="Min. verified allowance (RM/month)" hint="Only counts verified or historical amounts">{(id) => <Input id={id} type="number" min={0} step={100} value={minAllow} onChange={(e) => setMinAllow(e.target.value)} />}</Field>
+            {activeFilters > 0 && <div className="sm:col-span-2 lg:col-span-4"><button onClick={() => { setRole(''); setOwner(''); setStatus(''); setRoute(''); setSector(''); setKlass(''); setEvid(''); setAllow(''); setMinAllow('') }} className="text-sm font-medium text-primary hover:underline">Clear filters</button></div>}
           </div>
         )}
         <p className="mt-3 text-sm text-muted tnum" aria-live="polite">
-          {rows ? <><strong className="font-semibold text-ink">{view.length}</strong> of {total} Cyberjaya companies{focus !== 'all' ? <> · fit for <strong className="font-medium text-ink">{roleName(boot, focus)}</strong></> : ''}{sort === 'best' && scored ? ' · best match first' : ''}</> : 'Loading companies…'}
+          {rows ? <><strong className="font-semibold text-ink">{view.length}</strong> of {total} {city || 'Cyberjaya + Putrajaya'} employers{focus !== 'all' ? <> · fit for <strong className="font-medium text-ink">{roleName(boot, focus)}</strong></> : ''}{sort === 'best' && scored ? ' · best match first' : ''}</> : 'Loading companies…'}
         </p>
       </header>
 
@@ -133,8 +149,8 @@ export function CompaniesPage() {
             <>
               {!scored && <div className="mb-3"><Banner tone="info" title="Add a few details to see how well each company fits you">Pick a target role, add a skill and one project in My Profile. Until then, companies are listed by research priority.</Banner></div>}
               {view.length === 0 ? <div className="card border-dashed"><Empty title="No companies match" icon={<Building2 size={20} aria-hidden />} action={<Button onClick={() => { setQ(''); setRole(''); setOwner(''); setStatus(''); setRoute(''); setStarred(false) }}>Clear search and filters</Button>}>Try fewer filters or a different search.</Empty></div> : (
-                <ul ref={listRef} onKeyDown={onListKey} aria-label="Cyberjaya companies" className="space-y-2 pb-6">
-                  {view.map((c) => <CompanyRow key={c.company_id} c={c} boot={boot} focusRoles={focusRoles ?? (p.roles as string[])} active={sel === c.company_id} onSelect={() => select(c.company_id)} onStar={() => toggleStar(c)} />)}
+                <ul ref={listRef} onKeyDown={onListKey} aria-label="Employers" className="space-y-2 pb-6">
+                  {view.map((c) => <CompanyRow key={c.company_id} c={c} boot={boot} focusRoles={focusRoles ?? (p.roles as string[])} active={sel === c.company_id} picked={picked.includes(c.company_id)} onPick={() => togglePick(c.company_id)} onSelect={() => select(c.company_id)} onStar={() => toggleStar(c)} />)}
                 </ul>
               )}
             </>
@@ -149,13 +165,14 @@ export function CompaniesPage() {
         )}
       </div>
       {!wide && selected && <Modal wide title={selected.name} onClose={() => setSel(null)}><CompanyDetail key={selected.company_id} c={selected} focusRoles={focusRoles} bare onStar={() => toggleStar(selected)} onPrepare={() => { setSel(null); prepare({ companyId: selected.company_id, focusRoles }) }} /></Modal>}
+      {comparing && <CompareModal ids={picked} onClose={() => setComparing(false)} />}
       {adding && <AddCompany onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void refresh() }} />}
     </div>
   )
 }
 
 // ------------------------------------------------------------------ list row
-function CompanyRow({ c, boot, focusRoles, active, onSelect, onStar }: { c: any; boot: any; focusRoles: string[]; active: boolean; onSelect: () => void; onStar: () => void }) {
+function CompanyRow({ c, boot, focusRoles, active, picked, onPick, onSelect, onStar }: { c: any; boot: any; focusRoles: string[]; active: boolean; picked: boolean; onPick: () => void; onSelect: () => void; onStar: () => void }) {
   const fit = c.fit
   const band = bandOf(fit.label)
   const tags = [...c.role_families].filter((r: string) => r !== 'other').sort((a: string, b: string) => Number(focusRoles.includes(b)) - Number(focusRoles.includes(a))).slice(0, 3)
@@ -172,13 +189,17 @@ function CompanyRow({ c, boot, focusRoles, active, onSelect, onStar }: { c: any;
             <p className="font-display truncate text-[17px] font-semibold leading-snug">{c.name}</p>
             <p className="truncate text-sm text-muted">{c.industry}</p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <Chip>{c.ownership_type}</Chip>
+              {c.city && <Chip>{c.city}</Chip>}
+              {c.sector_group !== 'UNKNOWN' && <Chip tone={c.sector_group === 'GOVERNMENT' ? 'info' : 'neutral'}>{c.sector_group === 'GOVERNMENT' ? 'Government' : 'Non-government'}</Chip>}
+              {c.classes.filter((k: string) => ['GLC', 'MNC', 'PLC'].includes(k)).map((k: string) => <Chip key={k}>{k}</Chip>)}
+              <Chip tone={c.allowance_grade === 'A5' ? 'neutral' : c.allowance_grade === 'A6' ? 'bad' : 'ok'}>{c.allowance_monthly_min != null ? `RM${c.allowance_monthly_min}+ · ${c.allowance_grade_label}` : c.allowance_grade === 'A5' ? 'Allowance not confirmed' : c.allowance_grade_label}</Chip>
               {tags.map((r: string) => <Chip key={r} tone={focusRoles.includes(r) ? 'info' : 'neutral'}>{roleShort(boot, r)}</Chip>)}
             </div>
             <p className="mt-2 flex items-center gap-1.5 text-xs text-muted"><Info size={12} className="shrink-0" aria-hidden /><span className="truncate">{STATUS_EXPLAIN[c.status_enum]}</span>{c.location.state !== 'VERIFIED' && <span className="inline-flex shrink-0 items-center gap-0.5 text-warn"><AlertTriangle size={11} aria-hidden />check location</span>}</p>
           </div>
         </div>
       </button>
+      <label className="absolute bottom-2.5 right-3 flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={picked} onChange={onPick} aria-label={`Compare ${c.name}`} className="accent-[var(--primary)]" />Compare</label>
       <button aria-pressed={c.shortlisted} aria-label={c.shortlisted ? `Remove ${c.name} from shortlist` : `Add ${c.name} to shortlist`} onClick={onStar}
         className={cx('press absolute right-2.5 top-2.5 rounded-lg p-1.5 hover:bg-surface2', c.shortlisted ? 'text-primary' : 'text-faint')}><Star size={17} className={cx(c.shortlisted && 'fill-current')} aria-hidden /></button>
     </li>
@@ -272,6 +293,22 @@ function CompanyDetail({ c, focusRoles, onStar, onPrepare, bare }: { c: any; foc
         </section>
 
         {fit.warnings.map((w: string) => <Banner key={w} tone="warn" title="Check eligibility">{w}</Banner>)}
+
+        {full ? <AllowanceCard a={full.allowance} onAsk={onPrepare} /> : <Spinner label="Loading allowance evidence" />}
+
+        {full && (full.offices?.length > 0 || c.internship_evidence) && (
+          <section aria-labelledby="ver-h"><h3 id="ver-h" className="eyebrow mb-2">Verification</h3>
+            <dl className="grid grid-cols-[132px_1fr] gap-x-3 gap-y-1.5 text-sm">
+              <dt className="text-muted">Sector</dt><dd>{c.sector_group === 'GOVERNMENT' ? 'Government / public sector' : c.sector_group === 'NON_GOVERNMENT' ? 'Non-government' : 'Unclassified'}{c.classes?.length ? ` · ${c.classes.map((k: string) => k.replace(/_/g, ' ').toLowerCase()).join(', ')}` : ''}</dd>
+              <dt className="text-muted">Internship evidence</dt><dd>{String(c.internship_evidence ?? 'UNKNOWN').replace(/_/g, ' ').toLowerCase()}</dd>
+              <dt className="text-muted">Office confidence</dt><dd>{String(c.verification_level ?? 'UNVERIFIED').toLowerCase()}</dd>
+              {full.offices.map((o: any) => <><dt key={o.city} className="text-muted">{o.city} office</dt><dd key={o.city + 'd'}>{o.address ?? 'No address'}<span className="block text-xs text-muted">{o.verification_note ?? o.verification}</span></dd></>)}
+              {c.deadline_text && <><dt className="text-muted">Deadline</dt><dd>{c.deadline_text}</dd></>}
+              {c.required_docs && <><dt className="text-muted">Required documents</dt><dd>{c.required_docs}</dd></>}
+            </dl>
+            {full.sources?.length > 0 && <ul className="mt-2 space-y-1 text-sm">{full.sources.map((x: any) => <li key={x.url}><button onClick={() => open(x.url)} className="inline-flex items-center gap-1 break-all text-left text-primary hover:underline"><ExternalLink size={12} className="shrink-0" aria-hidden />{x.description}</button> <span className="text-xs text-muted">({x.supports?.toLowerCase()}, {x.confidence?.toLowerCase()})</span></li>)}</ul>}
+          </section>
+        )}
 
         {/* opportunity: never presented as live */}
         <section aria-labelledby="opp-h">

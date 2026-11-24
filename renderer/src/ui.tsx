@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, X, XCircle } from 'lucide-react'
 import type { Tone } from './api'
@@ -75,7 +76,7 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
     el.addEventListener('keydown', onKey)
     return () => { el.removeEventListener('keydown', onKey); prev?.focus?.() }
   }, [onClose])
-  return (
+  return createPortal(
     <div className="anim-fade fixed inset-0 z-50 grid place-items-center bg-black/35 p-3 sm:p-6" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={labelId} className={cx('anim-fade-up flex max-h-[92vh] w-full flex-col rounded-xl border border-line bg-surface shadow-[0_8px_30px_rgba(0,0,0,.14)]', wide ? 'max-w-3xl' : 'max-w-lg')}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -86,7 +87,7 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
         {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
       </div>
     </div>
-  )
+  , document.body)
 }
 
 // ---------------------------------------------------------------- Tabs (roving focus, arrow keys)

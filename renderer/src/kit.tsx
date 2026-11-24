@@ -7,7 +7,7 @@ export function Logo({ size = 32 }: { size?: number }) {
   const g = useId()
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" role="img" aria-label="Career Hub" className="shrink-0">
-      <defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#8b9cf6" /><stop offset="1" stopColor="#4338ca" /></linearGradient></defs>
+      <defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#5aa58a" /><stop offset="1" stopColor="#1f5f4a" /></linearGradient></defs>
       <rect width="40" height="40" rx="11" fill={`url(#${g})`} />
       <path d="M13 24.5V15.5a3.5 3.5 0 0 1 3.5-3.5h7" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
       <path d="M27 15.5v9a3.5 3.5 0 0 1-3.5 3.5h-7" fill="none" stroke="#fff" strokeOpacity=".72" strokeWidth="3" strokeLinecap="round" />
