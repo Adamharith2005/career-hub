@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Diff, FileText, FolderOpen, RefreshCw, Sav
 import { api, errMsg, fmtDateTime } from './api'
 import { useApp } from './ctx'
 import { PdfPreview } from './PdfPreview'
+import { AttachResume } from './Resumes'
 import { Banner, Button, Chip, Empty, Field, Input, Select, Textarea, Toggle, cx, useToast } from './ui'
 
 type DocType = 'RESUME' | 'COVER_LETTER'
@@ -38,8 +39,9 @@ export function DocumentsTab({ detail, reload }: { detail: any; reload: () => vo
   if (!docs.length) {
     return (
       <div className="mx-auto max-w-xl py-6">
+        <AttachResume appId={app.application_id} className="mb-4" />
         <Empty title="No documents yet" icon={<FileText size={20} aria-hidden />}>
-          We’ll build a one-page, ATS-friendly resume and a cover letter from your confirmed facts, check every claim against them, and save PDF + Word files to this application’s folder. Nothing is invented.
+          CV Studio builds a one-page, ATS-friendly tailored CV and a cover letter from your confirmed facts, check every claim against them, and save PDF + Word files to this application’s folder. Nothing is invented.
         </Empty>
         <div className="mt-2 space-y-4 rounded-xl border border-line bg-surface p-4">
           {factsCount === 0 && <Banner tone="warn" title="Confirm your profile first" action={<Button size="sm" onClick={() => go('profile')}>Open My Profile</Button>}>Documents are built only from confirmed facts. You have none yet.</Banner>}
@@ -47,7 +49,7 @@ export function DocumentsTab({ detail, reload }: { detail: any; reload: () => vo
           <div className="grid gap-3 sm:grid-cols-2"><Field label="Document language">{(id) => <Select id={id} value={lang} onChange={(e) => setLang(e.target.value as any)}><option value="en">English</option><option value="ms">Bahasa Malaysia</option></Select>}</Field></div>
           <AiOption ai={ai} on={useAi} setOn={setUseAi} />
           {issues && <IssueList issues={issues} title="Blocked by the fact check — nothing was exported" />}
-          <Button variant="primary" busy={busy} disabled={!factsCount || !boot.profile.storage_root} onClick={generate} data-testid="generate-docs">Generate documents</Button>
+          <Button variant="primary" busy={busy} disabled={!factsCount || !boot.profile.storage_root} onClick={generate} data-testid="generate-docs">Draft tailored CV and letter</Button>
         </div>
       </div>
     )
@@ -107,6 +109,8 @@ function Editor({ detail, type, setType, reload, onRegenerate, busy, lang, setLa
       setDocId(r.doc_id); reload()
     } catch (e) { toast('bad', errMsg(e)) } finally { setSaving(false) }
   }
+  const approve = (v: boolean) => api('docs.approve', { docId: saved.doc_id, approved: v }).then(() => { toast('ok', v ? 'Approved. Nothing is sent automatically.' : 'Approval withdrawn.'); reload() }).catch((e) => toast('bad', errMsg(e)))
+  const restore = async () => { try { const r = await api('docs.restore', { docId: saved.doc_id }); if (!r.ok) { setIssues(r.issues); return } toast('ok', `Restored as version ${r.version}.`); setDocId(r.doc_id); reload() } catch (e) { toast('bad', errMsg(e)) } }
   const open = (which: 'pdf' | 'docx') => api('docs.open', { docId: saved.doc_id, which }).catch((e) => toast('bad', errMsg(e)))
   const missing = detail.docs.filter((d: any) => d.pdfState !== 'ok' || d.docxState !== 'ok')
   const isR = type === 'RESUME'
@@ -120,14 +124,16 @@ function Editor({ detail, type, setType, reload, onRegenerate, busy, lang, setLa
       {aiNote && aiNote.status !== 'not_used' && aiNote.status !== 'used' && <div className="mb-3"><Banner tone="warn" title="AI wording was not used">{aiNote.message}</Banner></div>}
       {issues && <div className="mb-3"><IssueList issues={issues} title="Blocked by the fact check — nothing was saved" /></div>}
 
+ <AttachResume appId={app.application_id} className="mb-3" />
       <div className="mb-3 flex flex-wrap items-center gap-2" role="toolbar" aria-label="Document tools">
         <div className="flex rounded-lg border border-line-strong bg-surface p-0.5" role="group" aria-label="Document">
-          {(['RESUME', 'COVER_LETTER'] as const).map((t) => <button key={t} aria-pressed={type === t} onClick={() => setType(t)} className={cx('rounded-md px-3 py-1 text-sm', type === t ? 'bg-primary-soft font-medium text-primary' : 'text-muted hover:text-ink')}>{t === 'RESUME' ? 'Resume' : 'Cover letter'}</button>)}
+          {(['RESUME', 'COVER_LETTER'] as const).map((t) => <button key={t} aria-pressed={type === t} onClick={() => setType(t)} className={cx('rounded-md px-3 py-1 text-sm', type === t ? 'bg-primary-soft font-medium text-primary' : 'text-muted hover:text-ink')}>{t === 'RESUME' ? 'Tailored CV' : 'Cover letter'}</button>)}
         </div>
         <Select aria-label="Version" className="h-9 w-auto py-1" value={saved?.doc_id} onChange={(e) => { if (dirty && !window.confirm('Discard unsaved edits?')) return; setDocId(e.target.value) }}>
           {versions.map((v) => <option key={v.doc_id} value={v.doc_id}>v{v.version_number} · {fmtDateTime(v.created_at)}{v.is_submitted_version ? ' · submitted' : ''}</option>)}
         </Select>
         {saved?.is_submitted_version === 1 && <Chip tone="info">Submitted version — never overwritten</Chip>}
+        {saved && (saved.approved_at ? <Chip tone="ok" icon={<CheckCircle2 size={11} aria-hidden />}>Approved by you</Chip> : <Chip tone="warn">Draft — not approved</Chip>)}
         <span className="flex-1" />
         <Button size="sm" onClick={doUndo} disabled={!undo.length} icon={<Undo2 size={14} aria-hidden />}>Undo</Button>
         {isR && <Button size="sm" onClick={() => setShowDiff(!showDiff)} aria-pressed={showDiff} icon={<Diff size={14} aria-hidden />} className={cx(showDiff && 'border-primary bg-primary-soft text-primary')}>Diff vs master</Button>}
@@ -135,6 +141,8 @@ function Editor({ detail, type, setType, reload, onRegenerate, busy, lang, setLa
           <Button size="sm" disabled={!regen} onClick={async () => { try { const n = await api('docs.regenSection', { appId: app.application_id, sectionId: regen, ast }); apply(() => {}); setAst(n); setDirty(true); toast('ok', 'Section rebuilt from your confirmed facts. Save to keep it.') } catch (e) { toast('bad', errMsg(e)) } }} icon={<RefreshCw size={14} aria-hidden />} aria-label="Regenerate selected section" /></div>}
         <Button size="sm" onClick={() => open('pdf')}>PDF</Button><Button size="sm" onClick={() => open('docx')}>Word</Button>
         <Button size="sm" onClick={() => api('fs.openAppFolder', { appId: app.application_id }).catch((e) => toast('bad', errMsg(e)))} icon={<FolderOpen size={14} aria-hidden />}>Open folder</Button>
+        {saved && versions[0]?.doc_id !== saved.doc_id && !dirty && <Button size="sm" onClick={restore} icon={<Undo size={14} aria-hidden />}>Restore as new version</Button>}
+        {saved && !dirty && <Button size="sm" onClick={() => approve(!saved.approved_at)} data-testid="approve-doc">{saved.approved_at ? 'Withdraw approval' : 'Approve this version'}</Button>}
         <Button variant="primary" size="sm" busy={saving} disabled={!dirty} onClick={save} icon={<Save size={14} aria-hidden />}>Save version</Button>
       </div>
 

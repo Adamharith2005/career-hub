@@ -16,7 +16,7 @@ export interface ResumeSection {
 export interface ChangeLogEntry { kind: 'included' | 'omitted' | 'ordered' | 'edited'; factId?: string; section: string; reason: string }
 export interface ResumeAST {
   schema: 1; language: 'en' | 'ms'; target: { company: string; role: string; focus?: string }
-  header: { name: string; contacts: { label: string; text: string; url?: string }[] }
+  header: { name: string; headline?: string; contacts: { label: string; text: string; url?: string }[] }
   summary?: { text: string; factIds: string[] }
   sections: ResumeSection[]
   changelog: ChangeLogEntry[]

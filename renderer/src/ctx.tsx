@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 
-export type Page = 'home' | 'applications' | 'companies' | 'profile' | 'settings'
+export type Page = 'home' | 'applications' | 'companies' | 'imports' | 'resumes' | 'profile' | 'settings'
 export interface NewAppOpts { tab?: 'paste' | 'url' | 'company'; companyId?: string }
 export interface PrepareOpts { companyId: string; focusRoles?: string[] }
 export interface Boot {

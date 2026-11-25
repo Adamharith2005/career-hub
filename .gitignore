@@ -10,3 +10,8 @@ test-output/
 private-import/
 *.private.json
 *.eml
+graphify-out/
+
+# Private local data (profiles, personal documents)
+private/
+data/catalog.json.*.bak

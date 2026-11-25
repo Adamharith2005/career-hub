@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DB, all, get, run, tx, nowIso, id } from './db.ts'
 import { classifyRoleFamilies, slugify, safeParse } from './domain.ts'
+import { allowanceFor, GRADE_LABEL } from './allowance.ts'
 
 export const STATUS_ENUM: Record<string, string> = {
   A: 'VERIFIED_ACTIVE_VACANCY',
@@ -122,15 +123,26 @@ export async function readCompanyFile(file: string): Promise<SeedRow[]> {
 
 export async function importCompanyFile(db: DB, file: string) { return importSeedRows(db, await readCompanyFile(file)) }
 
-export interface CompanyFilter { q?: string; roleFamily?: string; ownership?: string; status?: string; tier?: string; hasEmail?: boolean; shortlistedOnly?: boolean; includeOutside?: boolean }
+export interface CompanyFilter { city?: 'Cyberjaya' | 'Putrajaya'; sector?: 'GOVERNMENT' | 'NON_GOVERNMENT'; classes?: string[]; internshipEvidence?: string[]; allowanceGrades?: string[]; minAllowance?: number; verifiedOnly?: boolean; q?: string; roleFamily?: string; ownership?: string; status?: string; tier?: string; hasEmail?: boolean; shortlistedOnly?: boolean; includeOutside?: boolean }
 
 export function listCompanies(db: DB, profileId: string, f: CompanyFilter = {}) {
   const rows = all(db, `SELECT * FROM companies WHERE profile_id IS NULL OR profile_id = ? ORDER BY COALESCE(suitability_score,0) DESC, name`, profileId)
   const star = new Set(all<{ company_id: string }>(db, 'SELECT company_id FROM shortlist WHERE profile_id = ?', profileId).map((r) => r.company_id))
+  const grades = new Map(all<{ company_id: string; grade: string; mm: number | null }>(db, 'SELECT company_id, MIN(grade) grade, MAX(monthly_min) mm FROM allowance_evidence GROUP BY company_id').map((r) => [r.company_id, r]))
+  const offices = new Map<string, string[]>()
+  for (const o of all<{ company_id: string; city: string }>(db, 'SELECT company_id, city FROM company_offices')) offices.set(o.company_id, [...(offices.get(o.company_id) ?? []), o.city])
   const q = f.q?.trim().toLowerCase()
-  return rows.map((r) => ({ ...hydrateCompany(r), shortlisted: star.has(r.company_id) })).filter((c) =>
-    (f.includeOutside || c.location.state !== 'OUTSIDE') && (!f.shortlistedOnly || c.shortlisted) &&
-    (!q || [c.name, c.industry, c.relevant_roles, c.address, c.ownership_type].join(' ').toLowerCase().includes(q)) &&
+  const cityOk = (c: any) => !f.city || c.city === f.city || (offices.get(c.company_id) ?? []).includes(f.city)
+  return rows.map((r) => ({ ...hydrateCompany(r), shortlisted: star.has(r.company_id), cities: offices.get(r.company_id) ?? (r.city ? [r.city] : []),
+    allowance_grade: grades.get(r.company_id)?.grade ?? 'A5', allowance_grade_label: GRADE_LABEL[grades.get(r.company_id)?.grade ?? 'A5'], allowance_monthly_min: ['A1', 'A2', 'A3', 'A4'].includes(grades.get(r.company_id)?.grade ?? '') ? grades.get(r.company_id)?.mm ?? null : null })).filter((c) =>
+    cityOk(c) && (f.includeOutside || f.city || c.location.state !== 'OUTSIDE') && (!f.shortlistedOnly || c.shortlisted) &&
+    (!f.sector || c.sector_group === f.sector) &&
+    (!f.classes?.length || f.classes.some((k) => c.classes.includes(k))) &&
+    (!f.internshipEvidence?.length || f.internshipEvidence.includes(c.internship_evidence)) &&
+    (!f.allowanceGrades?.length || f.allowanceGrades.includes(c.allowance_grade)) &&
+    (f.minAllowance == null || (c.allowance_monthly_min != null && c.allowance_monthly_min >= f.minAllowance)) &&
+    (!f.verifiedOnly || c.verification_level === 'VERIFIED') &&
+    (!q || [c.name, c.legal_entity, c.industry, c.relevant_roles, c.address, c.ownership_type, c.tech_departments, c.city].join(' ').toLowerCase().includes(q)) &&
     (!f.roleFamily || c.role_families.includes(f.roleFamily)) &&
     (!f.ownership || (c.ownership_type ?? '').toLowerCase().includes(f.ownership.toLowerCase())) &&
     (!f.status || c.status_enum === f.status) && (!f.tier || c.priority_tier === f.tier) &&
@@ -141,7 +153,7 @@ export function hydrateCompany(r: any) {
   const lv = r.last_verified as string | null
   const ageDays = lv ? Math.floor((Date.now() - new Date(lv).getTime()) / 86400000) : null
   const flags = safeParse<string[]>(r.flags_json, [])
-  return { ...r, cs_relevance: tidySeedText(r.cs_relevance), research_notes: tidySeedText(r.research_notes), role_families: safeParse<string[]>(r.role_families_json, []), flags,
+  return { ...r, cs_relevance: tidySeedText(r.cs_relevance), research_notes: tidySeedText(r.research_notes), role_families: safeParse<string[]>(r.role_families_json, []), classes: safeParse<string[]>(r.classes_json, []), flags,
     age_days: ageDays, stale: ageDays == null || ageDays > 90, location: locationState(r, flags) }
 }
 
@@ -150,11 +162,17 @@ export const tidySeedText = (s?: string | null) => (s ? s.replace(/\s\?\s/g, ' �
 
 export type LocationState = 'VERIFIED' | 'CITY_ONLY' | 'UNKNOWN' | 'OUTSIDE'
 /** Cyberjaya-only rule. Never upgrades uncertainty into confirmation: a seed row needs a Cyberjaya address, a verified office and a building-level address. */
-export function locationState(r: { address?: string | null; office_status?: string | null; is_seed?: number | null }, flags: string[] = []): { state: LocationState; note: string } {
+export function locationState(r: { address?: string | null; office_status?: string | null; is_seed?: number | null; city?: string | null; verification_level?: string | null }, flags: string[] = []): { state: LocationState; note: string } {
   const addr = (r.address ?? '').trim()
-  if (!addr) return { state: 'UNKNOWN', note: 'No address on record — confirm the Cyberjaya office before relying on this entry.' }
-  if (!/cyberjaya|\b63\d{3}\b/i.test(addr)) return { state: 'OUTSIDE', note: 'The recorded address is not in Cyberjaya.' }
-  if (r.is_seed === 0) return { state: 'CITY_ONLY', note: 'Added by you — Cyberjaya location not independently verified.' }
+  const city = r.city === 'Putrajaya' ? 'Putrajaya' : 'Cyberjaya'
+  const inCity = city === 'Putrajaya' ? /putrajaya|\b62\d{3}\b/i : /cyberjaya|\b63\d{3}\b/i
+  if (!addr) return { state: 'UNKNOWN', note: `No address on record — confirm the ${city} office before relying on this entry.` }
+  if (!inCity.test(addr)) return { state: 'OUTSIDE', note: `The recorded address is not in ${city}.` }
+  if (r.is_seed === 0) return { state: 'CITY_ONLY', note: `Added by you — ${city} location not independently verified.` }
+  if (r.city && r.verification_level) {                                  // Career Hub 3.0 rows: the audited level decides
+    if (r.verification_level === 'VERIFIED') return { state: 'VERIFIED', note: 'Office confirmed by an official source.' }
+    return { state: 'CITY_ONLY', note: r.verification_level === 'PROBABLE' ? 'Office supported by a corporate filing — confirm the reporting location.' : `A ${city} office is claimed in research but not independently confirmed — verify before visiting.` }
+  }
   if (flags.includes('BROAD_ADDRESS') || !/verified/i.test(r.office_status ?? ''))
     return { state: 'CITY_ONLY', note: 'Cyberjaya is listed, but the exact office is not confirmed — verify before visiting.' }
   return { state: 'VERIFIED', note: 'Office address verified in seed research.' }
@@ -171,7 +189,13 @@ export function getCompany(db: DB, profileId: string, companyId: string) {
   if (!r) return null
   const note = get<{ note: string }>(db, 'SELECT note FROM company_notes WHERE profile_id = ? AND company_id = ?', profileId, companyId)
   const starred = !!get(db, 'SELECT 1 FROM shortlist WHERE profile_id = ? AND company_id = ?', profileId, companyId)
-  return { ...hydrateCompany(r), user_note: note?.note ?? '', shortlisted: starred }
+  const detail = {
+    offices: all(db, 'SELECT city, address, verification, verification_note FROM company_offices WHERE company_id = ? ORDER BY city', companyId),
+    sources: all(db, 'SELECT url, description, source_date, confidence, supports FROM research_sources WHERE company_id = ? ORDER BY supports, source_date DESC', companyId),
+    allowance: allowanceFor(db, companyId),
+    offers: all(db, 'SELECT offer_id, amount, unit, conditions, benefits, offered_on, application_id FROM personal_allowance_offers WHERE profile_id = ? AND company_id = ? ORDER BY created_at DESC', profileId, companyId),
+  }
+  return { ...hydrateCompany(r), user_note: note?.note ?? '', shortlisted: starred, ...detail }
 }
 
 export function addUserCompany(db: DB, profileId: string, c: { name: string; website?: string; address?: string; industry?: string; email?: string; notes?: string }) {

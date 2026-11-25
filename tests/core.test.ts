@@ -439,6 +439,9 @@ describe('12. Email draft and .eml with real attachments', () => {
     const t = await mk(); await onboard(t, 'Alex Tester', ['cyber']); const { h } = t.api
     const id = await h['app.create']({ companyId: 'cj-cybersecurity-malaysia', company: 'CyberSecurity Malaysia', title: 'Cybersecurity Analyst Intern', jobText: JD_CYBER.replace('Fixture Corp', 'CyberSecurity Malaysia') })
     const g: any = await h['docs.generate']({ appId: id })
+    const before: any = await h['email.compose']({ appId: id, kind: 'APPLY' })
+    expect(before.attachments.find((a: any) => a.key === 'resume').checked).toBe(false)   // an unapproved draft is never pre-selected
+    await h['docs.approve']({ docId: g.resume.doc_id, approved: true })
     const c: any = await h['email.compose']({ appId: id, kind: 'APPLY' })
     expect(c.to).toBe('info@cybersecurity.my'); expect(c.toSource).toMatch(/verify/i)
     expect(c.attachments.filter((a: any) => a.checked).map((a: any) => a.key)).toEqual(['resume', 'letter'])
@@ -491,7 +494,7 @@ describe('12. Email draft and .eml with real attachments', () => {
   })
   it('handles non-ASCII subjects/names with RFC 2047 and keeps attachment filenames safe', async () => {
     const { buildEml } = await import('../core/email.ts')
-    const eml = buildEml({ subject: 'Permohonan Latihan Industri – Nur Aisyah Binti Ahmad (Universiti Teknologi)', body: 'Terima kasih', to: '', attachments: [{ filename: 'Résumé – Aisyah.pdf', content: Buffer.from('%PDF-1.4 test') }] }).toString('utf8')
+    const eml = buildEml({ subject: 'Permohonan Latihan Industri – Nur Aisyah Binti Ahmad (Universiti Teknologi)', body: 'Terima kasih', to: '', attachments: [{ filename: 'Resume – Aisyah.pdf', content: Buffer.from('%PDF-1.4 test') }] }).toString('utf8')
     expect(eml).toMatch(/Subject: =\?UTF-8\?B\?/); expect(eml).toMatch(/filename="R[^"]*\.pdf"/); expect(eml).not.toMatch(/[^\x00-\x7F]/)
   })
 })

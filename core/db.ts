@@ -208,6 +208,125 @@ export const MIGRATIONS: string[] = [
   DROP TABLE document_versions;
   ALTER TABLE document_versions_v3 RENAME TO document_versions;
   `,
+  `
+  -- V3 (Career Hub 3.0): multi-city research intelligence. Additive only: no existing column or row is changed or dropped.
+  ALTER TABLE companies ADD COLUMN city TEXT;                                   -- Cyberjaya | Putrajaya | NULL (unknown / user-added)
+  ALTER TABLE companies ADD COLUMN sector_group TEXT NOT NULL DEFAULT 'UNKNOWN'; -- GOVERNMENT | NON_GOVERNMENT | UNKNOWN
+  ALTER TABLE companies ADD COLUMN classes_json TEXT NOT NULL DEFAULT '[]';      -- overlapping ownership classes (GLC, PLC, MINISTRY, ...)
+  ALTER TABLE companies ADD COLUMN lead_id TEXT;
+  ALTER TABLE companies ADD COLUMN org_key TEXT;                                 -- normalised name for cross-import matching
+  ALTER TABLE companies ADD COLUMN verification_level TEXT NOT NULL DEFAULT 'UNVERIFIED'; -- VERIFIED | PROBABLE | UNVERIFIED | HISTORICAL
+  ALTER TABLE companies ADD COLUMN internship_evidence TEXT NOT NULL DEFAULT 'UNKNOWN';   -- ACTIVE_OPENING | CONFIRMED_PROGRAMME | HISTORICAL | DIRECT_OUTREACH | NOT_ACCEPTING | UNKNOWN
+  ALTER TABLE companies ADD COLUMN tech_departments TEXT;
+  ALTER TABLE companies ADD COLUMN deadline_text TEXT;
+  ALTER TABLE companies ADD COLUMN required_docs TEXT;
+  ALTER TABLE companies ADD COLUMN application_url TEXT;
+  UPDATE companies SET city = 'Cyberjaya' WHERE profile_id IS NULL AND company_id LIKE 'cj-%';   -- the V1/V2 seed was Cyberjaya-only
+  CREATE INDEX idx_companies_city ON companies(city);
+  CREATE INDEX idx_companies_orgkey ON companies(org_key);
+
+  CREATE TABLE company_offices (
+    office_id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    city TEXT NOT NULL,
+    address TEXT,
+    verification TEXT NOT NULL DEFAULT 'UNVERIFIED',
+    verification_note TEXT,
+    UNIQUE (company_id, city)
+  );
+  CREATE TABLE research_sources (
+    source_id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    url TEXT, description TEXT NOT NULL, source_date TEXT,
+    confidence TEXT NOT NULL DEFAULT 'UNVERIFIED',
+    supports TEXT,                                -- OFFICE | INTERNSHIP | ALLOWANCE | CONTACT | OTHER
+    batch_id TEXT,
+    UNIQUE (company_id, url, supports)
+  );
+  -- Shared, employer-specific allowance evidence. Unknown is a grade (A5), never an amount of 0.
+  CREATE TABLE allowance_evidence (
+    allowance_id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    grade TEXT NOT NULL CHECK (grade IN ('A1','A2','A3','A4','A5','A6')),
+    amount_min REAL, amount_max REAL,
+    payment_unit TEXT, monthly_min REAL, monthly_max REAL,
+    role TEXT, programme TEXT, conditions TEXT, benefits TEXT,
+    evidence_url TEXT, source_date TEXT, verified_at TEXT,
+    claim_text TEXT,                              -- original spreadsheet claim, verbatim, never shown as confirmed
+    policy_ref INTEGER NOT NULL DEFAULT 0,        -- 1 = a general government policy may apply (see gov_allowance_policies)
+    note TEXT,
+    batch_id TEXT
+  );
+  CREATE INDEX idx_allow_company ON allowance_evidence(company_id);
+  CREATE TABLE gov_allowance_policies (
+    policy_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL, authority TEXT NOT NULL,
+    rate_amount REAL NOT NULL, rate_unit TEXT NOT NULL,   -- HOUR | DAY | MONTH
+    hours_per_day REAL, max_paid_days INTEGER,
+    effective_date TEXT, source_url TEXT, source_checked TEXT,
+    caveats TEXT NOT NULL
+  );
+  -- Private to one profile: what an employer actually offered Adam or Akif. Never modifies shared evidence.
+  CREATE TABLE personal_allowance_offers (
+    offer_id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    application_id TEXT REFERENCES applications(application_id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(company_id) ON DELETE SET NULL,
+    amount REAL, unit TEXT NOT NULL DEFAULT 'MONTH',
+    conditions TEXT, benefits TEXT, offered_on TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_offers_profile ON personal_allowance_offers(profile_id);
+
+  CREATE TABLE import_batches (
+    batch_id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL, sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    summary_json TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE INDEX idx_batches_sha ON import_batches(sha256);
+  CREATE TABLE import_rows (
+    row_id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL REFERENCES import_batches(batch_id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(company_id) ON DELETE SET NULL,
+    sheet TEXT NOT NULL, source_row INTEGER NOT NULL,
+    outcome TEXT NOT NULL,                        -- NEW | CHANGED | UNCHANGED | CONFLICT
+    original_json TEXT NOT NULL,
+    diff_json TEXT
+  );
+  CREATE INDEX idx_import_rows_batch ON import_rows(batch_id);
+  `,
+  // v4: My Resumes (manual upload only) + approval gate for CV Studio drafts. Additive.
+  `
+  CREATE TABLE manual_resumes (
+    resume_id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_manual_resumes_profile ON manual_resumes(profile_id);
+  CREATE TABLE manual_resume_versions (
+    version_id TEXT PRIMARY KEY,
+    resume_id TEXT NOT NULL REFERENCES manual_resumes(resume_id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    version_number INTEGER NOT NULL,
+    original_name TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (resume_id, version_number)
+  );
+  CREATE TABLE application_resume_links (
+    application_id TEXT PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    version_id TEXT NOT NULL REFERENCES manual_resume_versions(version_id),
+    attached_at TEXT NOT NULL
+  );
+  ALTER TABLE document_versions ADD COLUMN approved_at TEXT;
+  `,
 ]
 
 export function migrate(db: DB) {

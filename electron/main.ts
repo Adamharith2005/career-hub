@@ -1,8 +1,7 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell, session } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, session } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { openDb } from '../core/db.ts'
-import { createApi, ApiError } from '../core/api.ts'
+import { createViewerApi } from '../core/viewer/api.ts'
 
 // ---- data location (override only for development / automated tests)
 const userData = process.env.CAREER_HUB_USER_DATA || path.join(app.getPath('appData'), 'Career Hub')
@@ -15,54 +14,27 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL
 
 if (!E2E && !app.requestSingleInstanceLock()) app.quit()
 
-// ---- API keys: encrypted with the OS credential store (DPAPI / Keychain / libsecret). Never plaintext.
-const secretFile = (pid: string) => path.join(userData, 'secrets', `${pid.replace(/[^\w-]/g, '')}.bin`)
-const secrets = {
-  available: () => safeStorage.isEncryptionAvailable(),
-  get(pid: string) {
-    try { const f = secretFile(pid); return fs.existsSync(f) && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(fs.readFileSync(f)) : null } catch { return null }
-  },
-  set(pid: string, value: string | null) {
-    const f = secretFile(pid)
-    if (value === null) { fs.rmSync(f, { force: true }); return }
-    if (!safeStorage.isEncryptionAvailable()) throw new ApiError('Secure key storage is not available on this computer, so the API key was NOT saved. Use a local model, or enable your OS credential store.', 'NO_SECURE_STORAGE')
-    fs.mkdirSync(path.dirname(f), { recursive: true })
-    fs.writeFileSync(f, safeStorage.encryptString(value), { mode: 0o600 })
-  },
-}
-
 let win: BrowserWindow | null = null
 
 function setup() {
-  const seedFile = app.isPackaged ? path.join(process.resourcesPath, 'data', 'cyberjaya-seed.tsv') : path.join(app.getAppPath(), 'data', 'cyberjaya-seed.tsv')
-  const db = openDb(path.join(userData, 'careerhub.db'))
-  const api = createApi({
-    db, userDataDir: userData, seedFile, secrets,
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
+  // The viewer needs no database: companies are JSON, profiles are private JSON under userData.
+  const api = createViewerApi({
+    userDataDir: userData,
+    bundledCatalog: path.join(base, 'data', 'catalog.json'),
+    seedPaths: [process.env.CAREER_HUB_SEED ?? '', path.join(userData, 'profile-seed.json'), path.join(base, 'private', 'profile-seed.json')].filter(Boolean),
     ui: {
-      pickFolder: async () => {
-        if (E2E) return process.env.CAREER_HUB_PICK_FOLDER ?? null
-        const r = await dialog.showOpenDialog(win!, { title: 'Choose where Career Hub saves your applications', properties: ['openDirectory', 'createDirectory'] })
-        return r.canceled ? null : r.filePaths[0]
-      },
       pickFile: async (kind) => {
-        if (E2E) return (kind === 'cv' ? process.env.CAREER_HUB_PICK_CV : kind === 'evidence' ? process.env.CAREER_HUB_PICK_EVIDENCE : process.env.CAREER_HUB_PICK_COMPANY) ?? null
-        const r = await dialog.showOpenDialog(win!, kind === 'cv'
-          ? { title: 'Choose your CV or résumé', properties: ['openFile'], filters: [{ name: 'PDF or Word', extensions: ['pdf', 'docx'] }] }
-          : kind === 'evidence' ? { title: 'Attach a supporting file (max 10 MB)', properties: ['openFile'], filters: [{ name: 'PDF, image or Word', extensions: ['pdf', 'png', 'jpg', 'jpeg', 'docx'] }] }
-          : { title: 'Choose the company spreadsheet', properties: ['openFile'], filters: [{ name: 'Spreadsheet', extensions: ['xlsx', 'tsv', 'csv'] }] })
+        if (E2E) return (kind === 'doc' ? process.env.CAREER_HUB_PICK_DOC : process.env.CAREER_HUB_PICK_WORKBOOK) ?? null
+        const r = await dialog.showOpenDialog(win!, kind === 'doc'
+          ? { title: 'Choose a CV or resume (PDF or Word, max 10 MB)', properties: ['openFile'], filters: [{ name: 'PDF or Word', extensions: ['pdf', 'docx'] }] }
+          : { title: 'Choose the company research workbook', properties: ['openFile'], filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }] })
         return r.canceled ? null : r.filePaths[0]
       },
       openPath: async (p) => { if (E2E) { e2eLog('openPath', p); return '' } return shell.openPath(p) },
-      showItem: (p) => { if (E2E) e2eLog('showItem', p); else shell.showItemInFolder(p) },
-      openExternal: (u) => { if (!/^https?:\/\//i.test(u)) return; if (E2E) e2eLog('openExternal', u); else void shell.openExternal(u) },
-      documentsPath: () => process.env.CAREER_HUB_DOCUMENTS || app.getPath('documents'),
-      downloadsPath: () => process.env.CAREER_HUB_DOWNLOADS || app.getPath('downloads'),
-      copyText: (t) => { clipboard.writeText(t); e2eLog('clipboard', JSON.stringify(t.slice(0, 400))) },
+      openExternal: (u) => { if (!/^(https?:\/\/|mailto:)/i.test(u)) return; if (E2E) e2eLog('openExternal', u); else void shell.openExternal(u) },
+      copy: (t) => clipboard.writeText(t),
     },
-  })
-  // First run (or a new machine): import the private two-profile payload if one is present. Idempotent; the database is backed up first.
-  void api.helpers.ensureSeed().then(async () => {
-    try { const st = await api.call('import.status'); if (st.pending) { const r = await api.call('import.run'); console.log('Profile import:', JSON.stringify(r.report.profiles.map((p: any) => ({ key: p.key, created: p.created, adopted: p.adopted, added: p.added })))) } } catch (e: any) { console.warn('Profile import skipped:', e?.message) }
   })
 
   ipcMain.handle('api', async (e, name: string, args: unknown) => {
@@ -76,8 +48,8 @@ function setup() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1360, height: 880, minWidth: 380, minHeight: 600, show: false, backgroundColor: '#faf8f4', title: 'Career Hub',
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: true },
+    width: 1440, height: 900, minWidth: 960, minHeight: 600, show: false, backgroundColor: '#f5f3ee', title: 'Career Hub',
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   })
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => win?.show())
@@ -88,7 +60,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Deny every permission request (camera, geolocation, notifications…): the app needs none.
+  // Deny every permission request (camera, geolocation, notifications…): the app needs none. Copying goes through the main process.
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
   setup(); createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

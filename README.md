@@ -1,5 +1,108 @@
 # Career Hub
 
+A private, offline desktop app for two Computer Science students (Adam and Akif) to **read their own CV information, explore Cyberjaya and Putrajaya internship organisations, copy what they need, and prepare an honest enquiry email**. Applications are made by hand, outside the app.
+
+No account, no login, no cloud, no database to connect, no application tracking, no automatic sending.
+
+## Shortest way to run it
+
+```bash
+npm install          # first time only
+npm start            # builds, then opens Career Hub
+```
+
+Choose **Adam** or **Akif**. The explorer opens straight away.
+
+## What you get
+
+| Screen | What it does |
+|---|---|
+| **Who's exploring today?** | Two profile cards. Profiles never mix contact details, documents or drafts. |
+| **Explore Companies** | Left: searchable list of all 170 researched organisations (Cyberjaya 78, Putrajaya 92) with filters for location, government / non-government, organisation type (ministry, department, GLC, MNC, SME, startup, university…), technical area, allowance evidence and internship evidence. Right: one-page dossier (company, internship, allowance, contact, research evidence, email draft). Tick 2–4 organisations to **Compare**. |
+| **Copy buttons** | Every field copies on one click. Also: *Copy company details*, *Copy contact information*, *Copy how to apply*, *Copy allowance info*, and the email subject, body or entire draft. Copying uses the real system clipboard. |
+| **Email draft** | Offline template, editable, per student. Honest wording: unadvertised organisations get an *enquiry*, never "your advertised opening". No recipient is ever guessed; if none is verified it says so. Nothing is sent from the app. |
+| **My Profile & CV** | Structured profile (education, skills, projects with status, experience, leadership) next to a real preview of the linked CV / resume. Useful even with no file linked. |
+| **My Resumes** | Upload PDF / DOCX, keep every version, rename, archive, preview, open the original, save a copy. Nothing is generated or rewritten. |
+| **Settings** | Theme (system / light / dark), reduced motion, profile switch, local data folder, **Update company list**. |
+
+### Evidence rules the data follows
+
+- The workbook lists **research leads, not verified vacancies**. Only organisations with an official source are labelled *Confirmed programme*; most are *Unknown* or *Cold-outreach candidate*.
+- **Unknown allowance is never RM0.** It reads "Allowance not confirmed".
+- The JPA government rate (RM5/hour, up to 8 h/day, 90 paid days) is shown as *policy*, never as proof that a specific department pays it.
+- Only 5 of 170 office addresses are independently verified; the rest are labelled *Not verified*.
+- Empty fields read "Not verified" or "Not recorded". Nothing is invented.
+
+## Where data lives
+
+Everything is plain JSON and files on this computer, under the Electron user-data folder (macOS: `~/Library/Application Support/Career Hub/viewer/`; override with `CAREER_HUB_USER_DATA`).
+
+| Path | Content |
+|---|---|
+| `viewer/profiles.json` | The two profiles (private; mode 0600) |
+| `viewer/documents/<profile>/` | Immutable CV / resume versions |
+| `viewer/catalog.json` | Company list after an update (the bundled `data/catalog.json` is the default) |
+| `viewer/exports/` | Copies saved with *Save a copy* |
+
+The app never opens or migrates the old `careerhub.db`. It stays untouched for rollback.
+
+## How the two profiles are created
+
+On first launch the app reads a **private seed file** and writes `viewer/profiles.json`. It looks in this order:
+
+1. `$CAREER_HUB_SEED`
+2. `<user-data>/profile-seed.json`
+3. `private/profile-seed.json` in the project folder (git-ignored)
+
+The seed is never committed. The file also lists the resume PDFs to link; they are **copied** into `viewer/documents/`. If no seed is found, two empty, usable profiles (Adam, Akif) are created and you can add files in My Resumes.
+
+The seed only fills a profile that has never been seeded, so later edits are never overwritten. To seed again, delete `viewer/profiles.json` after backing it up.
+
+**Moving to another computer:** copy the `viewer` folder into the same place on the new machine. A packaged build does not embed `private/`; put `profile-seed.json` in the user-data folder if you want first-run seeding there.
+
+## Company list: generate and update
+
+Generate the bundled JSON from the audited workbook:
+
+```bash
+node scripts/run-debug.mjs scripts/build-catalog.ts "/path/to/Internship_Research_Audited_Putrajaya_Cyberjaya.xlsx"
+```
+
+Or, in the app: **Settings → Update company list → choose a workbook**. The preview shows new / changed / unchanged counts. The merge:
+
+- never lets a blank cell erase an existing value,
+- keeps stronger evidence (e.g. a verified office or allowance grade) over weaker incoming data,
+- never removes an organisation,
+- backs up the previous `catalog.json`,
+- needs no database and works offline.
+
+## Develop and test
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite dev server + Electron |
+| `npm test` | Vitest unit tests |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run check` | typecheck + tests |
+| `npm run e2e` | Drives the **real Electron app** (synthetic profiles, real clipboard and PDF preview). Run `npm run build` first. Screenshots go to `test-output/screens` |
+| `npm run package` | Unpacked desktop app in `release/` |
+
+Tests use synthetic names only. No real personal data is in any committed file.
+
+## Security
+
+Context isolation and sandbox on; the renderer can only call a fixed table of `v.*` handlers; only `http(s)` links open externally; every permission request is denied; document paths are confined to the viewer folder; uploads are limited to PDF / DOCX (content sniffed) up to 10 MB; no telemetry and no network calls from the app.
+
+## Legacy tools
+
+The earlier tracker, CV Studio (tailoring, approval, versions) and SQLite database code remain in `core/` (`api.ts`, `db.ts`, `resume.ts`, `applications.ts`…) with their unit tests, but are not wired into the app. Their old end-to-end script is `scripts/e2e-legacy.ts`; it no longer matches the active UI. The previous README is kept below for reference.
+
+---
+
+## Previous README (legacy tracker app)
+
+# Career Hub
+
 A private, local-first desktop app for Computer Science / IT students and early-career applicants (Cyberjaya, Malaysia first).
 
 > **Choose role(s) once → import your master CV once → paste a vacancy or pick a company → honest fit check → truthful ATS-friendly resume + cover letter → ready-to-use email with the real files attached → track what *you* confirm you sent.**
@@ -161,3 +264,10 @@ Tests and CI use only fictional people (`tests/payload.ts`); a test fails if any
 
 ### V3 checks
 `npm run typecheck` · `npm test` (106 tests) · `npm run build && npm run e2e` (20 steps in the real Electron app: picker, five outputs, real downloads, clipboard, isolation, responsive, no network). `E2E_PAYLOAD=private-import/profiles.payload.json npm run e2e` runs the same against your real profiles (screenshots go to the git-ignored `test-output/screens-real/`). `npm run pack:demo -- <payload> <profileKey> "<Company>" <roleFamily> "<Role title>"` prepares a pack on a throwaway database and prints it.
+## Career Hub 4.0 additions
+
+- **Employer Atlas import.** `node scripts/run-debug.mjs scripts/build-catalog.ts "<Atlas workbook>.xlsx"` merges the workbook into `data/catalog.json` without removing organisations. Organisations dropped from the latest research are kept as unverified earlier leads.
+- **Match percentage** per company for the active profile, with an explanation and a role selector. It is a company/role alignment estimate, not a vacancy match.
+- **Tailor My CV** for both students: an offline, deterministic draft built only from the profile's own facts, with a before/after view, unsupported-claim flags, edit, regenerate, restore, approval and PDF export. No data leaves the machine.
+- **Akif's refreshed master resume** is prepared as a draft and only becomes a document after approval. Adam's resume is never edited. The master refresh is refused for Adam.
+- Approved CV PDFs are kept under `<userData>/viewer/cv/<profile>/`. They never overwrite a resume.
