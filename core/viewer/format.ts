@@ -1,6 +1,7 @@
 /** Plain-text formatters for the copy buttons. Only fields that exist are emitted; nothing is invented. */
 import type { CatalogCompany } from './catalog.ts'
 import { TECH_LABEL } from './catalog.ts'
+import { contactSummary, VERIFICATION_LABEL } from './contacts.ts'
 
 export const ALLOWANCE_LABEL: Record<string, string> = {
   CONFIRMED_PAID: 'Confirmed paid', HISTORICAL: 'Historical allowance', ESTIMATED: 'Estimated / policy only', UNKNOWN: 'Not confirmed', CONFIRMED_UNPAID: 'Confirmed unpaid',
@@ -32,12 +33,14 @@ export function allowanceText(c: CatalogCompany): string {
 }
 
 export function contactText(c: CatalogCompany): string {
-  const k = c.contacts
-  const rows = [
-    line('HR email', k.hrEmail), line('General email', k.generalEmail), line('Phone', k.phone), line('Careers page', k.careersUrl),
-    line('Contact form / portal', k.contactForm), line('LinkedIn', k.linkedin), line('Website', c.website),
-  ].filter(Boolean)
-  return [c.name, ...(rows.length ? rows : ['No verified public contact details recorded.'])].join('\n')
+  const cs = contactSummary(c); const rows: string[] = []
+  for (const r of cs.routes) {
+    if (r.verification === 'INVALID') continue
+    const tag = VERIFICATION_LABEL[r.verification]
+    rows.push(`${r.kind === 'EMAIL' ? (r.tier === 'E4' ? 'General email' : 'Recruitment email') : r.kind === 'PORTAL' ? (r.tier === 'E3' ? 'Careers portal' : 'Contact page') : 'Phone or form'}: ${r.value} (${tag})`)
+  }
+  const k = c.contacts; const extra = [line('LinkedIn', k.linkedin), line('Website', c.website)].filter(Boolean) as string[]
+  return [c.name, ...(rows.length || extra.length ? [...rows, ...extra] : ['No verified public contact details recorded.'])].join('\n')
 }
 
 export function applicationText(c: CatalogCompany): string {

@@ -82,9 +82,9 @@ describe('email template engine', () => {
     expect(A(ADAM, DATA, { role: 'DATA_ANALYTICS', attachments: ['RESUME'] }).body).toContain('Please find attached my resume.'); expect(A(ADAM, DATA, { role: 'DATA_ANALYTICS', attachments: ['RESUME'] }).body).not.toMatch(/cover letter|referral/)
   })
   it('does not guess recipients or invent company facts', () => {
-    const none = A(AKIF, SOFT, { role: 'FULL_STACK' }); expect(none.to).toBeNull(); expect(none.toNote).toBe('No verified public recruitment email available.')
-    const d = A(ADAM, DATA, { role: 'DATA_ANALYTICS' }); expect(d.to).toBe('hr@fixture.example'); expect(d.body).not.toMatch(/Fixture Analytics (is|has|builds|offers)|your (platform|product|team of)/i)
-    expect(A(AKIF, co('g', 'Gen Co', ['SOFTWARE'], { contacts: { hrEmail: null, generalEmail: 'info@gen.example', phone: null, careersUrl: null, contactForm: null, linkedin: null } }), { role: 'FULL_STACK' }).toNote).toMatch(/not a confirmed recruitment/)
+    const none = A(AKIF, SOFT, { role: 'FULL_STACK' }); expect(none.to).toBeNull(); expect(none.toNote).toMatch(/^No verified recruitment address is available/)
+    const d = A(ADAM, DATA, { role: 'DATA_ANALYTICS' }); expect(d.to).toBeNull(); expect(d.recipients.map((r) => r.email)).toEqual(['hr@fixture.example']); expect(d.recipients[0].warning).toMatch(/not verified/i); expect(A(ADAM, DATA, { role: 'DATA_ANALYTICS', recipientKey: d.recipients[0].key }).to).toBe('hr@fixture.example'); expect(d.body).not.toMatch(/Fixture Analytics (is|has|builds|offers)|your (platform|product|team of)/i)
+    expect(A(AKIF, co('g', 'Gen Co', ['SOFTWARE'], { contacts: { hrEmail: null, generalEmail: 'info@gen.example', phone: null, careersUrl: null, contactForm: null, linkedin: null } }), { role: 'FULL_STACK' }).to).toBeNull()
   })
   it('is stable, free of placeholders, banned phrases and the accented spelling', () => {
     const a = A(ADAM, DATA, { role: 'DATA_ANALYTICS', attachments: ['RESUME', 'CV'] }), b = A(ADAM, DATA, { role: 'DATA_ANALYTICS', attachments: ['RESUME', 'CV'] })
@@ -161,7 +161,7 @@ describe('email workflow through the API', () => {
     const before = f(); await api.call('v.email.draft', { profileId: 'adam', companyId: 'c1', role: 'DATA_ANALYTICS' }); await api.call('v.email.draft', { profileId: 'adam', companyId: 'c2' }); expect(f()).toEqual(before)
   })
   it('opens a mail client only for a verified recipient, without claiming attachments, and copies via the API', async () => {
-    const d: any = await api.call('v.email.draft', { profileId: 'adam', companyId: 'c1', role: 'DATA_ANALYTICS', attachmentKeys: [] })
+    const d: any = await api.call('v.email.draft', { profileId: 'adam', companyId: 'c1', role: 'DATA_ANALYTICS', attachmentKeys: [], recipientKey: 'EMAIL:hr@fixture.example' }); expect(d.to).toBe('hr@fixture.example')
     await api.call('v.email.mailto', { to: d.to, subject: d.subject, body: d.body }); expect(external[0]).toMatch(/^mailto:hr@fixture\.example\?subject=Application/); expect(decodeURIComponent(external[0])).not.toMatch(/attached/)
     await expect(api.call('v.email.mailto', { to: 'not an address', subject: 's', body: 'b' })).rejects.toThrow(/verified recipient/)
     await api.call('v.copy.text', { text: d.body }); expect(copied.at(-1)).toBe(d.body)

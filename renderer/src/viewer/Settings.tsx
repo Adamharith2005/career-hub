@@ -11,6 +11,8 @@ export function SettingsPage({ theme, setTheme, motion, setMotion }: { theme: st
   const [pv, setPv] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<any>(null)
+  const [cr, setCr] = useState<any>(null)
+  const importContacts = async () => { setBusy(true); try { const r = await api('v.contacts.import'); setCr(r); toast('ok', `Contact research added to ${r.matched} organisations.`); await load() } catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false) } }
   const load = () => api('v.about').then(setAbout).catch(() => {})
   useEffect(() => { void load() }, [])
   const pick = async () => { setBusy(true); setDone(null); try { const r = await api('v.catalog.preview', {}); if (r) setPv(r) } catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false) } }
@@ -38,6 +40,12 @@ export function SettingsPage({ theme, setTheme, motion, setMotion }: { theme: st
           {about && <dl className="mt-3 space-y-1 text-sm"><div className="flex gap-2"><dt className="w-32 text-muted">Data folder</dt><dd className="min-w-0 break-all font-mono text-[12.5px]" data-testid="data-dir">{about.dataDir}</dd></div><div className="flex gap-2"><dt className="w-32 text-muted">Company list</dt><dd>{about.companies} organisations · {about.catalogSource || 'bundled'}</dd></div></dl>}
           <div className="mt-3"><Button size="sm" onClick={() => api('v.openDataFolder').catch((e) => toast('bad', errMsg(e)))} icon={<FolderOpen size={14} aria-hidden />}>Show data folder</Button></div>
           <p className="mt-3 text-xs text-muted">To move to another computer, copy this folder’s <code>viewer</code> directory into the same place on the new one.</p>
+        </section>
+        <section className="border-t border-line py-5" aria-label="Import contact research">
+          <h2 className="text-[15px] font-semibold">Import contact research</h2>
+          <p className="mt-1 text-sm text-muted">Reads the HR contact research files from your Downloads folder and adds them to the company list. No organisation is removed, stronger evidence is kept, and anything you confirmed yourself is protected. Importing again changes nothing.</p>
+          <div className="mt-3"><Button busy={busy} onClick={importContacts} icon={<Upload size={15} aria-hidden />} data-testid="contacts-import">Import from Downloads</Button></div>
+          {cr && <div className="mt-3" data-testid="contacts-report"><Banner tone="ok" title="Contact research imported">{cr.matched} of {cr.v4Rows} research rows matched, {cr.preservedWithoutResearch} organisations have no research yet, {cr.after} organisations in total.{cr.exported ? ` The list still needing research was saved to ${cr.exported}.` : ''}</Banner></div>}
         </section>
         <section className="border-t border-line py-5" aria-label="Update company list" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <h2 className="text-[15px] font-semibold">Update company list</h2>

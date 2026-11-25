@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 import { makeCvPdf } from '../tests/helpers.ts'
+import { contactSummary } from '../core/viewer/contacts.ts'
 
 const OUT = path.resolve('test-output'); const SHOTS = path.join(OUT, 'screens'); fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true })
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'careerhub-e2e-'))
@@ -42,7 +43,7 @@ const expect = (c: unknown, msg: string) => { if (!c) throw new Error(msg) }
 async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v
-  Object.assign(env, { CAREER_HUB_E2E: '1', CAREER_HUB_USER_DATA: userData, CAREER_HUB_SEED: seed, CAREER_HUB_PICK_DOC: secondDoc, CAREER_HUB_PICK_WORKBOOK: (!!REAL_WORKBOOK && fs.existsSync(REAL_WORKBOOK)) ? REAL_WORKBOOK : '', CAREER_HUB_E2E_LOG: logFile })
+  Object.assign(env, { CAREER_HUB_EXPORTS_DIR: path.join(tmp, 'exports'), CAREER_HUB_E2E: '1', CAREER_HUB_USER_DATA: userData, CAREER_HUB_SEED: seed, CAREER_HUB_PICK_DOC: secondDoc, CAREER_HUB_PICK_WORKBOOK: (!!REAL_WORKBOOK && fs.existsSync(REAL_WORKBOOK)) ? REAL_WORKBOOK : '', CAREER_HUB_E2E_LOG: logFile })
   const app = await electron.launch({ args: ['.'], env })
   const page = await app.firstWindow()
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
@@ -94,7 +95,7 @@ await step('sector, type, technical, allowance and evidence filters narrow the l
   await chips.getByRole('button', { name: /^Non-government/ }).click(); await waitCount(page, N_NON)
   await chips.getByRole('button', { name: /^Non-government/ }).click(); await waitCount(page, N)
   const tech = page.getByRole('group', { name: 'Technical areas' })
-  await tech.getByRole('button', { name: /^Cybersecurity/ }).click(); await page.waitForFunction(() => { const n = Number(document.querySelector('[data-testid="result-count"] .figure')?.textContent); return n > 0 && n < 400 }, null, { timeout: 8000 })
+  await tech.getByRole('button', { name: /^Cybersecurity/ }).click(); await page.waitForFunction((total) => { const n = Number(document.querySelector('[data-testid="result-count"] .figure')?.textContent); return n > 0 && n < total }, N, { timeout: 8000 })
   expect(await count(page) < N, 'technical chip narrows the list')
   await tech.getByRole('button', { name: /^Cybersecurity/ }).click(); await waitCount(page, N)
   await page.getByTestId('filters-toggle').click(); const f = page.getByTestId('filters')
@@ -119,7 +120,7 @@ await step('copy buttons write real clipboard text: details, contact, subject, d
   await page.getByTestId('copy-contact').click(); await page.waitForTimeout(150); c = await clip(app); expect(/info@nacsa\.gov\.my/.test(c), 'contact text has the email')
   await page.getByRole('button', { name: 'Copy general email' }).click(); await page.waitForTimeout(150); expect((await clip(app)) === 'info@nacsa.gov.my', 'single-field copy')
   await page.getByTestId('copy-draft').click(); await page.waitForTimeout(150); c = await clip(app)
-  expect(/^To: info@nacsa\.gov\.my\nSubject: /.test(c) && c.includes('Test Student One') && !c.includes('Test Student Two'), `draft text: ${c.slice(0, 120)}`)
+  expect(/^Subject: /.test(c) && !/^To:/m.test(c) && c.includes('Test Student One') && !c.includes('Test Student Two'), `draft text: ${c.slice(0, 120)}`)
   expect(/I am writing to enquire about potential internship opportunities in .+ at /.test(c) && !/advertised|apply for the/.test(c), 'unadvertised enquiry wording'); expect(/Dear Hiring Manager,/.test(c) && /Yours sincerely,\nTest Student One\n/.test(c), 'standard structure and signature')
 })
 await step('draft is editable and a non-verified recipient is never guessed', async () => {
@@ -128,7 +129,7 @@ await step('draft is editable and a non-verified recipient is never guessed', as
   const t = await page.getByTestId('dossier').innerText(); expect(/Confirmed unpaid/.test(t), 'official-unpaid labelled')
 })
 await step('email draft follows the standard: structure, attachments, copy buttons, regenerate, restore and the mail app', async () => {
-  await page.getByTestId('search').fill('NACSA'); await page.getByTestId('company-row').filter({ hasText: 'NACSA' }).first().click(); await page.getByTestId('email-draft').waitFor()
+  await page.getByTestId('search').fill('Aerodyne'); await page.getByTestId('company-row').filter({ hasText: 'Aerodyne' }).first().click(); await page.getByTestId('email-draft').waitFor()
   const body = page.getByLabel('Email body'); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement)?.value.includes('Dear Hiring Manager'))
   const t0 = await body.inputValue(); const L = t0.split('\n')
   expect(L[0] === 'Dear Hiring Manager,' && L.at(-3) === 'Yours sincerely,' && L.at(-2) === 'Test Student One' && /one@example\.com/.test(L.at(-1)!), `structure: ${t0.slice(0, 80)}`)
@@ -138,16 +139,16 @@ await step('email draft follows the standard: structure, attachments, copy butto
   await page.getByTestId('attachments').getByRole('checkbox').first().uncheck(); await page.waitForFunction(() => !/attached/i.test((document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value))
   expect(await page.getByTestId('attachments').getByRole('checkbox', { disabled: true }).count() >= 2, 'cover letter and referral letter offered as unavailable')
   await page.getByTestId('copy-subject').click(); expect(await clipEventually(app, (t) => t === subject), 'copy subject')
-  await page.getByTestId('copy-recipient').click(); expect(await clipEventually(app, (t) => t === 'info@nacsa.gov.my'), 'copy recipient')
+  await page.getByTestId('copy-recipient').click(); expect(await clipEventually(app, (t) => t === 'jobs@aerodyne.group'), 'copy recipient')
   const bodyNow = await body.inputValue(); await page.getByTestId('copy-body').click(); expect(await clipEventually(app, (t) => t === bodyNow), 'copy body')
-  await page.getByTestId('copy-draft').click(); expect(await clipEventually(app, (t) => t.startsWith(`To: info@nacsa.gov.my\nSubject: ${subject}\n\nDear Hiring Manager,`)), 'copy whole email')
+  await page.getByTestId('copy-draft').click(); expect(await clipEventually(app, (t) => t.startsWith(`To: jobs@aerodyne.group\nSubject: ${subject}\n\nDear Hiring Manager,`)), 'copy whole email')
   await body.fill('Edited by me'); await page.getByTestId('restore').click(); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value.startsWith('Dear Hiring Manager'))
   await body.fill('Edited again'); await page.getByTestId('regen').click(); await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value.startsWith('Dear Hiring Manager'))
   expect(/not attached automatically/i.test(await page.getByTestId('attach-warning').innerText()), 'attachment warning visible')
   await page.getByTestId('attachments').getByRole('checkbox').first().check(); await page.waitForFunction(() => /attached my resume/.test((document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value))
   await page.getByTestId('open-mail').click(); await page.getByTestId('attach-checklist').waitFor()
   expect(/still to attach/.test(await page.getByTestId('attach-status').innerText()), 'pending attachments flagged'); await page.getByTestId('attach-checklist').getByRole('checkbox').first().check(); expect(/All documents ticked/.test(await page.getByTestId('attach-status').innerText()), 'checklist completes')
-  await page.waitForTimeout(300); expect(/mailto:info@nacsa\.gov\.my\?subject=/.test(fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : ''), 'mail app opened with a mailto link')
+  await page.waitForTimeout(300); expect(/mailto:jobs@aerodyne\.group\?subject=/.test(fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : ''), 'mail app opened with a mailto link')
   await shot(page, '18-email-draft')
 })
 await step('compare two organisations in-page', async () => {
@@ -248,6 +249,75 @@ await step('Akif: different score for the same company; his master resume is pre
   await shot(page, '17-adam-resumes')
 })
 
+console.log('\nHR contact research')
+const rowFor = async (term: string, has: string) => { await nav(page, 'Explore Companies'); await page.getByTestId('search').fill(term); await page.getByTestId('company-row').filter({ hasText: has }).first().click(); await page.getByTestId('dossier-title').filter({ hasText: has.replace(/\s*\(.*$/, '') }).waitFor(); await page.getByTestId('contact-panel').waitFor(); await page.getByTestId('email-draft').waitFor(); await page.waitForFunction(() => !!document.querySelector('textarea[aria-label="Email body"]') && (document.querySelector('textarea[aria-label="Email body"]') as HTMLTextAreaElement).value.length > 50) }
+const draftTo = (p: Page) => p.getByTestId('draft-to').innerText().catch(() => '')
+const bodyOf = (p: Page) => p.getByLabel('Email body').inputValue()
+const external = () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '')
+await step('verified recruitment contact (Aerodyne): shown with its classification, evidence and filled into the draft', async () => {
+  await rowFor('Aerodyne', 'Aerodyne')
+  expect((await page.getByTestId('contact-label').innerText()) === 'HR / Recruitment', 'label'); expect((await page.getByTestId('contact-best').innerText()) === 'jobs@aerodyne.group', 'best email')
+  expect(/Independently checked, current/.test(await page.getByTestId('contact-verification').innerText()), 'verification state'); expect(/People & Culture/.test(await page.getByTestId('contact-panel').innerText()), 'department shown for a checked contact')
+  expect((await draftTo(page)) === 'jobs@aerodyne.group', 'recipient filled'); expect(await page.getByTestId('draft-to-warning').count() === 0, 'no warning for a verified contact')
+  expect(/A contact is not a vacancy/.test(await page.getByTestId('contact-panel').innerText()), 'vacancy caveat'); expect(/I am writing to enquire/.test(await bodyOf(page)), 'enquiry wording kept')
+  await page.getByTestId('contact-copy').click(); expect(await clipEventually(app, (t) => t === 'jobs@aerodyne.group'), 'Copy Email'); await page.getByTestId('contact-view-evidence').count()
+  await page.getByText(/Evidence behind this/).click(); expect(/Independent check/.test(await page.getByTestId('contact-evidence').innerText()), 'evidence expands'); await shot(page, '30-contact-verified')
+})
+await step('general contacts (MDEC, Putrajaya Holdings) are never labelled HR and carry a fallback warning', async () => {
+  for (const [term, has, email] of [['MDEC', 'MDEC', 'clic@mdec.com.my'], ['Putrajaya Holdings', 'Putrajaya Holdings', 'corpcom@pjh.com.my']] as const) {
+    await rowFor(term, has); expect((await page.getByTestId('contact-label').innerText()) === 'General Email', `${term} label`); expect((await page.getByTestId('contact-best').innerText()) === email, `${term} address`)
+    expect(!/HR \/ Recruitment/.test(await page.getByTestId('contact-label').innerText()), 'not HR'); expect(/not HR/i.test(await page.getByTestId('contact-warning').first().innerText()), 'warning'); expect((await draftTo(page)) === email, 'fallback recipient')
+    expect(/General contact fallback/.test(await page.getByTestId('draft-to-warning').innerText()), 'draft warning')
+  }
+  expect(/Conflicting information/.test(await page.getByTestId('contact-alternatives').innerText()), 'the uncorroborated hr@ address is flagged'); await shot(page, '31-contact-general')
+})
+await step('portal-only company (Deriv): portal shown, no invented HR email, portal opens', async () => {
+  await rowFor('Deriv', 'Deriv'); expect((await page.getByTestId('contact-label').innerText()) === 'Careers Portal', 'label'); expect(/careers\.deriv\.com/.test(await page.getByTestId('contact-best').innerText()), 'portal url')
+  expect(/not been inspected|not inspected/.test(await page.getByTestId('contact-panel').innerText()), 'portal not claimed as verified'); expect(await page.getByTestId('draft-to-empty').count() === 1, 'no recipient'); await page.getByTestId('draft-portal').waitFor()
+  await page.getByTestId('contact-open-portal').click(); await page.waitForTimeout(300); expect(/openExternal\thttps:\/\/careers\.deriv\.com/.test(external()), 'portal opened through the safe handler')
+  await page.getByRole('button', { name: 'View Application Instructions' }).click(); await page.getByTestId('contact-instructions').waitFor(); await shot(page, '32-contact-portal')
+})
+await step('historical contact (DNeX): visible as historical, never filled in, selectable with a warning', async () => {
+  await rowFor('DNeX', 'DNeX'); expect(/historical/i.test(await page.getByTestId('contact-label').innerText()), 'label'); expect(/Reconfirm/.test(await page.getByTestId('contact-warning').first().innerText()), 'warning')
+  expect(!/Independently checked, current/.test(await page.getByTestId('contact-verification').innerText()), 'not shown as fresh'); expect(await page.getByTestId('draft-to-empty').count() === 1, 'not filled in')
+  await page.getByText(/Evidence behind this/).click(); expect(/ukm\.my/.test(await page.getByTestId('contact-evidence').innerText()), 'historical source visible')
+  await page.getByTestId('recipient-select').selectOption({ index: 1 }); await page.waitForFunction(() => document.querySelector('[data-testid="draft-to"]')?.textContent === 'career@dnex.com.my'); expect(/Historical/.test(await page.getByTestId('draft-to-warning').innerText()), 'manual selection warns')
+})
+await step('Gemini-only contact: warned, not filled in, usable only by explicit choice', async () => {
+  const g = CAT.find((c: any) => { const s = contactSummary(c); return s.state === 'PENDING' && s.best?.kind === 'EMAIL' && s.best.verification === 'GEMINI_UNVERIFIED' && !/[(),]/.test(c.name) })
+  await rowFor(g.name, g.name); expect((await page.getByTestId('contact-label').innerText()) === 'Needs Verification', 'label'); expect(/Gemini-reported/.test(await page.getByTestId('contact-verification').innerText()), 'state'); expect(/not verified/i.test(await page.getByTestId('contact-warning').first().innerText()), 'warning')
+  expect(await page.getByTestId('draft-to-empty').count() === 1, 'not filled in'); await page.getByTestId('contact-use-anyway').click(); await page.waitForFunction(() => /^[^@\s]+@/.test(document.querySelector('[data-testid="draft-to"]')?.textContent ?? ''))
+  expect(/not verified/i.test(await page.getByTestId('draft-to-warning').innerText()), 'manual choice warns'); await shot(page, '33-contact-unverified')
+})
+await step('an employer missing from the V4 files stays visible, with its earlier research and no invented contact', async () => {
+  await rowFor('Kometsoft', 'Kometsoft'); expect((await page.getByTestId('contact-label').innerText()) === 'No Contact Found', 'label'); expect(/No reliable contact route/.test(await page.getByTestId('contact-best').innerText()), 'honest text'); expect(await page.getByTestId('draft-to-empty').count() === 1, 'no recipient')
+  await page.getByTestId('contact-mark').click(); await page.getByText('Marked for research').first().waitFor(); await page.getByTestId('contact-mark').click(); await page.getByTestId('contact-actions').getByRole('button', { name: 'Copy Company Name' }).click(); expect(await clipEventually(app, (t) => /Kometsoft/.test(t)), 'copy company name'); await shot(page, '34-contact-missing')
+})
+await step('contact filters and readiness sorting work and do not change the suitability scores', async () => {
+  await nav(page, 'Explore Companies'); await page.getByTestId('search').fill(''); await waitCount(page, N)
+  const want = (st: string) => CAT.filter((c: any) => contactSummary(c).state === st).length
+  for (const [v, st] of [['VERIFIED_EMAIL', 'VERIFIED_EMAIL'], ['GENERAL_EMAIL', 'GENERAL_EMAIL'], ['PORTAL', 'PORTAL'], ['PENDING', 'PENDING'], ['NONE', 'NONE']] as const) { await page.getByTestId('contact-filter').selectOption(v); await waitCount(page, want(st)) }
+  await page.getByTestId('contact-filter').selectOption('VERIFIED_EMAIL'); await waitCount(page, want('VERIFIED_EMAIL')); expect(want('VERIFIED_EMAIL') === 5, 'five verified recruitment emails in the research')
+  const labels = await page.getByTestId('card-contact').allInnerTexts(); expect(labels.every((l) => l === 'HR / Recruitment'), `cards: ${labels}`)
+  const withFilter = await page.getByTestId('company-list').getByTestId('match-ring').evaluateAll((e) => e.map((x) => x.getAttribute('data-score')))
+  await page.getByTestId('contact-filter').selectOption(''); await waitCount(page, N); await page.getByTestId('search').fill('Aerodyne'); await waitCount(page, 1); const alone = await page.getByTestId('company-list').getByTestId('match-ring').first().getAttribute('data-score')
+  expect(withFilter.includes(alone), 'a contact filter never changes a score'); await page.getByTestId('search').fill(''); await page.getByTestId('sort').selectOption('contact'); await page.waitForTimeout(300)
+  expect((await page.getByTestId('card-contact').first().innerText()) === 'HR / Recruitment', 'readiness sort puts verified contacts first'); await page.getByTestId('sort').selectOption('match'); await shot(page, '35-contact-filter')
+})
+await step('profile isolation: Adam and Akif get the same employer contact but their own emails', async () => {
+  await rowFor('Aerodyne', 'Aerodyne'); const adamTo = await draftTo(page), adamBody = await bodyOf(page)
+  await page.getByTestId('profile-chip').click(); await page.getByTestId('pick-akif').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor(); await rowFor('Aerodyne', 'Aerodyne')
+  const akifTo = await draftTo(page), akifBody = await bodyOf(page)
+  expect(adamTo === akifTo && akifTo === 'jobs@aerodyne.group', 'same recipient'); expect(adamBody !== akifBody, 'different bodies'); expect(/Test Student One/.test(adamBody) && !/Test Student Two/.test(adamBody), 'Adam signature'); expect(/Test Student Two/.test(akifBody) && !/Test Student One/.test(akifBody), 'Akif signature')
+  expect(!/Outside the classroom/.test(akifBody), 'no leadership paragraph for Akif'); await page.getByTestId('profile-chip').click(); await page.getByTestId('pick-adam').click(); await page.getByRole('heading', { name: 'Find your internship fit' }).waitFor()
+})
+await step('Settings: contact research imports from Downloads, idempotently, without a database', async () => {
+  const dl = path.join(os.homedir(), 'Downloads', 'CAREER_HUB_EMPLOYER_ATLAS_V4_HR_CONTACTS.csv'); if (!fs.existsSync(dl)) { console.log('      (skipped: research files not present on this machine)'); return }
+  await nav(page, 'Settings'); await page.getByTestId('contacts-import').click(); await page.getByTestId('contacts-report').waitFor(); const t = await page.getByTestId('contacts-report').innerText()
+  expect(/187 of 187 research rows matched/.test(t) && new RegExp(`${CAT.filter((c: any) => !c.contactIntel).length} organisations have no research yet`).test(t) && new RegExp(`${N} organisations in total`).test(t), `report: ${t}`); expect(!fs.existsSync(path.join(userData, 'careerhub.db')), 'db created')
+  await page.getByTestId('contacts-import').click(); await page.waitForTimeout(500); expect(/187 of 187/.test(await page.getByTestId('contacts-report').innerText()), 'second import same result')
+})
+
 console.log('\nSettings and persistence')
 await step('dark mode and reduced motion apply', async () => {
   await nav(page, 'Settings'); await page.getByLabel('Theme').selectOption('dark')
@@ -281,6 +351,19 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1024, 768]] as const) {
       await nav(page, 'My Profile & CV'); await page.getByTestId('profile-name').waitFor(); await noHScroll(page, `profile@${w}`); if (w === 1440) await shot(page, `21-profile-${w}-${theme}`)
       await nav(page, 'My Resumes'); await page.getByTestId('doc-card').first().waitFor(); await noHScroll(page, `resumes@${w}`); if (w !== 1280) await shot(page, `22-resumes-${w}-${theme}`)
       await nav(page, 'Settings'); await noHScroll(page, `settings@${w}`)
+    })
+  }
+}
+
+console.log('\nContact panel at three sizes')
+for (const [w, h] of [[1440, 900], [1280, 800], [1024, 768]] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    await step(`${w}×${h} ${theme}: contact panel, evidence and draft recipient fit and stay readable`, async () => {
+      await resize(app, w, h); await page.waitForTimeout(250); await nav(page, 'Settings'); await page.getByLabel('Theme').selectOption(theme)
+      await rowFor('Putrajaya Holdings', 'Putrajaya Holdings'); await page.getByText(/Evidence behind this/).click(); await page.getByTestId('contact-panel').scrollIntoViewIfNeeded(); await noHScroll(page, `contact@${w}`)
+      await page.getByTestId('contact-panel').evaluate((el) => el.scrollIntoView({ block: 'start' })); await shot(page, `36-contact-${w}-${theme}`)
+      await page.getByTestId('draft-to-warning').evaluate((el) => el.scrollIntoView({ block: 'center' })); await shot(page, `37-recipient-${w}-${theme}`)
+      await page.getByTestId('contact-filter').scrollIntoViewIfNeeded().catch(() => {})
     })
   }
 }

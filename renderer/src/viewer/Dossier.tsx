@@ -10,6 +10,7 @@ import { ALLOWANCE_LABEL, CLASS_LABEL, EVIDENCE_LABEL, OFFICE_LABEL, TECH_LABEL 
 import { useV } from './vctx'
 import { MatchPanel, type RoleInfo } from './Match'
 import { CvStudio } from './CvStudio'
+import { ContactPanel } from './ContactPanel'
 import { ROLE_OPTIONS } from './labels'
 
 const SECTOR = { GOVERNMENT: 'Government', NON_GOVERNMENT: 'Non-government', UNKNOWN: 'Unclassified' } as const
@@ -45,9 +46,13 @@ export function Dossier({ c }: { c: any }) {
   const [showDoc, setShowDoc] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   const [studio, setStudio] = useState(false)
+  const [cx, setCx] = useState(c)
+  const [recipientKey, setRecipientKey] = useState<string | null>(null)
+  const useEmail = (key: string) => { setRecipientKey(key); document.getElementById('s-email')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   const a = c.allowance, i = c.internship, k = c.contacts
   const office = c.offices[0]
-  const bestEmail = k.hrEmail ?? k.generalEmail
+  const cs = cx.contactSummary
+  const bestEmail = cs?.best?.kind === 'EMAIL' && cs.state !== 'PENDING' ? cs.best.value : null
   const amount = a.monthlyMin != null ? `${a.monthlyMin}${a.monthlyMax && a.monthlyMax !== a.monthlyMin ? `–${a.monthlyMax}` : ''}` : null
   const kind = [c.city, SECTOR[c.sector as keyof typeof SECTOR], ...c.classes.map((x: string) => CLASS_LABEL[x] ?? x)].filter(Boolean).join(' · ')
   return (
@@ -68,6 +73,7 @@ export function Dossier({ c }: { c: any }) {
       </header>
 
       <div className="mt-6"><MatchPanel key={profileId + c.id} profileId={profileId} companyId={c.id} role={role} onRole={setRole} /></div>
+      <div className="mt-4"><ContactPanel c={cx} onChange={(n) => { setCx(n); setRecipientKey(null) }} onUseEmail={useEmail} /></div>
 
       {/* The three things you decide on, side by side and set apart by rules, not boxes. */}
       <div className="mt-6 grid grid-cols-[1.3fr_1fr_1fr] divide-x divide-line border-y border-line max-[1000px]:grid-cols-1 max-[1000px]:divide-x-0 max-[1000px]:divide-y" aria-label="At a glance">
@@ -85,9 +91,10 @@ export function Dossier({ c }: { c: any }) {
           <p className="mt-2 text-[12.5px] leading-snug text-muted">{i.evidence === 'DIRECT_OUTREACH' || i.evidence === 'UNKNOWN' ? 'No verified opening. Write as an enquiry.' : i.method ?? 'See evidence below.'}</p>
         </section>
         <section className="py-4 pl-5 max-[1000px]:pl-0" aria-label="Contact summary">
-          <p className="flex items-center gap-2 text-[13px] text-muted"><Mark kind={k.hrEmail ? 'verified' : k.generalEmail ? 'unverified' : 'unknown'} />Contact</p>
-          {bestEmail ? <p className="has-reveal mt-2 flex items-center gap-1 break-all font-mono text-[14px] leading-snug">{bestEmail}<span className="reveal-copy"><CopyIcon text={bestEmail} label="best email" /></span></p> : <p className="font-display mt-2 text-[1.5rem] leading-tight text-muted">No email found</p>}
-          <p className="mt-2 text-[12.5px] leading-snug text-muted">{k.hrEmail ? 'Public HR address.' : k.generalEmail ? 'General address, not a confirmed recruitment inbox.' : 'Use the careers page or website instead.'}</p>
+          <p className="flex items-center gap-2 text-[13px] text-muted"><Mark kind={cs?.state === 'VERIFIED_EMAIL' ? 'verified' : cs?.state === 'GENERAL_EMAIL' ? 'probable' : cs?.state === 'NONE' ? 'none' : 'unverified'} />Contact</p>
+          <p className="font-display mt-2 text-[1.5rem] leading-tight">{cs?.label ?? 'No Contact Found'}</p>
+          {bestEmail ? <p className="has-reveal mt-1 flex items-center gap-1 break-all font-mono text-[13px] leading-snug">{bestEmail}<span className="reveal-copy"><CopyIcon text={bestEmail} label="best email" /></span></p> : null}
+          <p className="mt-2 text-[12.5px] leading-snug text-muted">{cs?.state === 'VERIFIED_EMAIL' ? 'Independently checked recruitment address.' : cs?.state === 'GENERAL_EMAIL' ? 'General address, not HR. A fallback only.' : cs?.state === 'PORTAL' ? 'Apply through the careers portal.' : cs?.state === 'PENDING' ? 'Reported by research, not verified.' : 'See the Internship Contact section.'}</p>
         </section>
       </div>
 
@@ -125,7 +132,7 @@ export function Dossier({ c }: { c: any }) {
         <div className="pt-3"><CopyButton size="sm" variant="ghost" what="allowance information" text={() => api('v.copy.allowance', { id: c.id })}>Copy allowance info</CopyButton></div>
       </Chapter>
 
-      <Chapter id="s-contact" title="Contact">
+      <Chapter id="s-contact" title="Earlier contact research" note="From the first research file. Not verified. The Internship Contact section above is the current view.">
         <Fact label="HR email" value={k.hrEmail} copy={k.hrEmail} mono />
         <Fact label="General email" value={k.generalEmail} copy={k.generalEmail} mono />
         <Fact label="Phone" value={k.phone} copy={k.phone} mono />
@@ -144,7 +151,7 @@ export function Dossier({ c }: { c: any }) {
 
       <section className="grid grid-cols-[10.5rem_minmax(0,1fr)] gap-x-8 border-t border-line pt-5 max-[1100px]:grid-cols-1 max-[1100px]:gap-y-2" aria-labelledby="s-email">
         <div><h3 id="s-email" className="text-[15px] font-semibold">Email draft for {profile.displayName}</h3><p className="mt-1 text-[12.5px] leading-snug text-muted">Copy and paste. Nothing is sent from here.</p></div>
-        <EmailDraft company={c} role={role} />
+        <EmailDraft company={cx} role={role} recipientKey={recipientKey} onRecipient={setRecipientKey} />
       </section>
 
       {studio && role && <CvStudio company={c} role={role} roles={ROLE_OPTIONS} onClose={() => setStudio(false)} />}

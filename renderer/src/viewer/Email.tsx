@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, FileText, FolderOpen, Mail, RotateCcw, RefreshCw, TriangleAlert } from 'lucide-react'
+import { VERIFICATION_LABEL } from './labels'
 import { api, errMsg } from '../api'
 import { Banner, Button, Spinner, cx } from '../ui'
 import { CopyButton, CopyIcon } from './Copy'
 import { useV } from './vctx'
 
 /** Offline template draft in the Career Hub email standard. Copy-only: nothing is ever sent from here. */
-export function EmailDraft({ company, role }: { company: any; role: string | null }) {
+export function EmailDraft({ company, role, recipientKey, onRecipient }: { company: any; role: string | null; recipientKey: string | null; onRecipient: (k: string | null) => void }) {
   const { profileId, profile, reloadProfile } = useV()
   const [att, setAtt] = useState<{ options: any[]; defaults: string[] } | null>(null)
   const [keys, setKeys] = useState<string[] | null>(null)
@@ -23,9 +24,9 @@ export function EmailDraft({ company, role }: { company: any; role: string | nul
   useEffect(() => {
     if (keys == null) return
     let live = true; setErr('')
-    api('v.email.draft', { profileId, companyId: company.id, role: role ?? undefined, attachmentKeys: keys, includeAvailability: withAvail }).then((x) => { if (live) { setD(x); setSubject(x.subject); setBody(x.body) } }).catch((e) => live && setErr(errMsg(e)))
+    api('v.email.draft', { profileId, companyId: company.id, role: role ?? undefined, attachmentKeys: keys, includeAvailability: withAvail, recipientKey }).then((x) => { if (live) { setD(x); setSubject(x.subject); setBody(x.body) } }).catch((e) => live && setErr(errMsg(e)))
     return () => { live = false }
-  }, [profileId, company.id, role, keys, withAvail, tick])
+  }, [profileId, company.id, role, keys, withAvail, tick, recipientKey])
   if (err) return <Banner tone="bad" title="Could not prepare a draft">{err}</Banner>
   if (!d || !att) return <Spinner label="Preparing draft" />
   const apply = company.internship.applicationUrl
@@ -39,9 +40,19 @@ export function EmailDraft({ company, role }: { company: any; role: string | nul
       <div className="rounded-md border border-line-strong bg-surface">
         <div className="has-reveal flex items-baseline gap-3 border-b border-line px-4 py-2.5">
           <span className="w-14 shrink-0 text-[13px] text-muted">To</span>
-          {d.to ? <><span className="min-w-0 flex-1 truncate font-mono text-[13px]" data-testid="draft-to">{d.to}</span><span className="reveal-copy"><CopyIcon text={d.to} label="recipient" /></span></> : <span className="text-[13px] text-faint">No verified recipient address</span>}
+          {d.to ? <><span className="min-w-0 flex-1 truncate font-mono text-[13px]" data-testid="draft-to">{d.to}</span><span className="reveal-copy"><CopyIcon text={d.to} label="recipient" /></span></> : <span className="text-[13px] text-faint" data-testid="draft-to-empty">No recipient filled in</span>}
         </div>
-        {d.to && <p className="border-b border-line py-1.5 pl-[5.75rem] pr-4 text-xs text-muted">{d.toNote}</p>}
+        <p className="border-b border-line py-1.5 pl-[5.75rem] pr-4 text-xs text-muted" data-testid="draft-to-note">{d.toNote}</p>
+        {d.toWarning && <p className="flex gap-1.5 border-b border-line bg-warn-bg py-1.5 pl-[5.75rem] pr-4 text-xs text-warn" role="note" data-testid="draft-to-warning"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{d.toWarning}</p>}
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
+          <label htmlFor="draft-recipient" className="w-14 shrink-0 text-[12px] text-muted">Contact</label>
+          <select id="draft-recipient" data-testid="recipient-select" className="h-8 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2 text-[13px]" value={d.toKey ?? ''} onChange={(e) => onRecipient(e.target.value || null)}>
+            <option value="">{d.recipients.length ? 'Automatic: verified contact only' : 'No researched email addresses'}</option>
+            {d.recipients.map((r: any) => <option key={r.key} value={r.key}>{r.email} · {VERIFICATION_LABEL[r.verification]}</option>)}
+          </select>
+          {recipientKey && <Button size="sm" variant="ghost" onClick={() => onRecipient(null)}>Use automatic choice</Button>}
+        </div>
+        {!d.to && d.portal && <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-[13px]" data-testid="draft-portal"><span>This organisation takes applications through a careers portal{d.portal.verified ? '' : ' (reported, not inspected)'}. No email address is filled in.</span><Button size="sm" variant="secondary" onClick={() => api('v.openExternal', { url: d.portal.url })} icon={<ExternalLink size={14} aria-hidden />}>Open Careers Portal</Button></div>}
         <div className="has-reveal flex items-center gap-3 border-b border-line px-4 py-1.5">
           <label htmlFor="draft-subject" className="w-14 shrink-0 text-[13px] text-muted">Subject</label>
           <input id="draft-subject" className="h-8 min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-offset-0" value={subject} onChange={(e) => setSubject(e.target.value)} />

@@ -271,3 +271,10 @@ Tests and CI use only fictional people (`tests/payload.ts`); a test fails if any
 - **Tailor My CV** for both students: an offline, deterministic draft built only from the profile's own facts, with a before/after view, unsupported-claim flags, edit, regenerate, restore, approval and PDF export. No data leaves the machine.
 - **Akif's refreshed master resume** is prepared as a draft and only becomes a document after approval. Adam's resume is never edited. The master refresh is refused for Adam.
 - Approved CV PDFs are kept under `<userData>/viewer/cv/<profile>/`. They never overwrite a resume.
+
+## HR contact research (V4)
+
+- `node scripts/run-debug.mjs scripts/import-contacts.ts [folder]` reads the four V4 research files (default `~/Downloads`), merges them into `data/catalog.json` and writes the list of employers still needing research. Settings also has "Import contact research", which does the same into the local company list. Importing twice changes nothing.
+- Contacts carry a tier (E1 to E6) and a separate verification state. Gemini-reported contacts are shown as unverified, general addresses are never labelled HR, historical addresses stay historical, and nothing is guessed from a company domain.
+- Email drafts fill in a recipient only from an independently checked recruitment address, or an official general address as a labelled fallback. Any other researched address can be chosen by hand, with a warning. A contact is never treated as a vacancy.
+- "I have checked this address myself" and "Mark for Research" are stored separately and survive every re-import.

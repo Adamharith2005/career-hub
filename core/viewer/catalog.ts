@@ -44,6 +44,10 @@ export interface CatalogCompany {
   sector: 'GOVERNMENT' | 'NON_GOVERNMENT' | 'UNKNOWN'
   /** Source-reported scores, kept as history only. Never used or displayed as a match. */
   sourceClaims?: { adamScore: number | null; akifScore: number | null; note: string }
+  /** HR and internship contact research with provenance. See contacts.ts. Never overwritten by a company-list import. */
+  contactIntel?: import('./contacts.ts').ContactIntel
+  /** Earlier records folded into this one (same organisation, corrected location or renumbered). Old ids still resolve to this company. */
+  mergedFrom?: { id: string; leadId: string | null; city: string | null; name: string; note: string }[]
   /** True when the organisation came from the 'missing prior leads' list and is not yet verified. */
   priorLead?: boolean
   classes: string[]                 // MINISTRY, DEPARTMENT, GLC, MNC, PLC, SME, STARTUP, UNIVERSITY_RESEARCH …
@@ -211,7 +215,42 @@ export function mergeCatalog(existing: Catalog | null, incoming: Catalog): { cat
   }
   const companies = [...out.values()]
   report.total = companies.length
-  return { catalog: { version: 1, generatedAt: new Date().toISOString(), sourceFile: incoming.sourceFile, sourceSha256: incoming.sourceSha256, companies }, report }
+  const done = reconcileDuplicates({ version: 1, generatedAt: new Date().toISOString(), sourceFile: incoming.sourceFile, sourceSha256: incoming.sourceSha256, companies })
+  report.total = done.catalog.companies.length
+  return { catalog: done.catalog, report }
+}
+
+// ---------------------------------------------------------------- duplicate reconciliation
+const hostOf = (u: string | null) => (u ?? '').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '')
+const dupKey = (c: CatalogCompany) => {
+  const name = normalizeOrgKey(c.name.replace(/\s*\(.*$/, '')); const host = hostOf(c.website); const legal = normalizeOrgKey((c.legalEntity ?? '').replace(/\s*\/.*$/, ''))
+  // Only an exact match on name, website host AND legal entity counts. A shared website alone (two units of one ministry) never does.
+  return name && host && legal ? `${name}|${host}|${legal}` : null
+}
+const uniq = <T,>(a: T[], k: (x: T) => string) => { const seen = new Set<string>(); return a.filter((x) => { const s = k(x); if (seen.has(s)) return false; seen.add(s); return true }) }
+/** Folds records that are the same organisation into the better-evidenced one, keeping every office, role, source and old id. Idempotent. */
+export function reconcileDuplicates(cat: Catalog): { catalog: Catalog; merged: { kept: string; dropped: string }[] } {
+  const groups = new Map<string, CatalogCompany[]>()
+  for (const c of cat.companies) { const k = dupKey(c); if (k) (groups.get(k) ?? groups.set(k, []).get(k)!).push(c) }
+  const drop = new Set<string>(); const replace = new Map<string, CatalogCompany>(); const merged: { kept: string; dropped: string }[] = []
+  for (const g of groups.values()) {
+    if (g.length < 2) continue
+    const rank = (c: CatalogCompany) => (c.contactIntel ? 4 : 0) + (/^(cj|new)-/.test(c.id) ? 2 : 0) + (c.lastVerified && c.lastVerified > '2026-11-18' ? 1 : 0)
+    const [keep, ...rest] = [...g].sort((a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id))
+    let m: CatalogCompany = { ...keep }
+    for (const o of rest) {
+      m = { ...m,
+        offices: uniq([...m.offices, ...o.offices.map((x) => ({ ...x, note: `Earlier research location (${o.city ?? 'unknown'}). ${x.note ?? ''}`.trim() }))], (x) => normalizeOrgKey(x.address)),
+        roles: uniq([...m.roles, ...o.roles], (x) => x.toLowerCase()), tech: [...new Set([...m.tech, ...o.tech])], sources: uniq([...m.sources, ...o.sources, ...(o.contacts.careersUrl && o.contacts.careersUrl !== m.contacts.careersUrl ? [{ label: 'Careers page (earlier record)', url: o.contacts.careersUrl }] : [])], (x) => `${x.label}|${x.url}`),
+        uncertainties: uniq([...m.uncertainties, ...o.uncertainties], (x) => x),
+        contacts: Object.fromEntries(Object.entries(m.contacts).map(([k, v]) => [k, v ?? (o.contacts as any)[k]])) as CatalogCompany['contacts'],
+        mergedFrom: [...(m.mergedFrom ?? []), ...(o.mergedFrom ?? []), { id: o.id, leadId: o.leadId, city: o.city, name: o.name, note: `Same organisation as ${keep.id}: same name, legal entity and website. The later research corrected its location.` }] }
+      drop.add(o.id); merged.push({ kept: keep.id, dropped: o.id })
+    }
+    replace.set(keep.id, m)
+  }
+  if (!merged.length) return { catalog: cat, merged }
+  return { catalog: { ...cat, companies: cat.companies.filter((c) => !drop.has(c.id)).map((c) => replace.get(c.id) ?? c) }, merged }
 }
 
 // ---------------------------------------------------------------- persistence

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import JSZip from 'jszip'
@@ -99,7 +100,9 @@ describe('one-time import: stable ids, idempotent, provenance', () => {
 
 describe('migration v2 → v3', () => {
   it('rebuilds document_versions without losing rows and then accepts CV documents; backs up first', () => {
-    const file = path.join(fs.mkdtempSync(path.join(process.env.TEMP ?? '.', 'mig-')), 'x.db')
+    // Always a throw-away folder in the system temp directory, removed afterwards. Never the repository.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-')); const file = path.join(dir, 'x.db')
+    try {
     const db = openDb(file)   // fully migrated
     ;(db as any).close()
     // Simulate a v2 database: re-create it by running only the first two migrations.
@@ -117,6 +120,7 @@ describe('migration v2 → v3', () => {
     db3.exec(`INSERT INTO document_versions (doc_id,profile_id,application_id,doc_type,version_number,ast_json,created_at) VALUES ('d2','p','a','CV',1,'{}','t')`)
     expect(fs.existsSync(`${file}.pre-v2-to-v${MIGRATIONS.length}.bak`)).toBe(true)
     ;(db3 as any).close()
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
   })
 })
 

@@ -22,6 +22,8 @@ function setup() {
   const api = createViewerApi({
     userDataDir: userData,
     bundledCatalog: path.join(base, 'data', 'catalog.json'),
+    researchDir: process.env.CAREER_HUB_RESEARCH_DIR || app.getPath('downloads'),
+    exportsDir: process.env.CAREER_HUB_EXPORTS_DIR || path.join(app.getPath('documents'), 'Career Hub', 'exports'),
     seedPaths: [process.env.CAREER_HUB_SEED ?? '', path.join(userData, 'profile-seed.json'), path.join(base, 'private', 'profile-seed.json')].filter(Boolean),
     ui: {
       pickFile: async (kind) => {

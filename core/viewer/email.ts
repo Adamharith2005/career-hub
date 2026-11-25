@@ -5,13 +5,15 @@
  * Only verified profile facts are used. Dates, programme and documents appear only when they are confirmed or selected.
  */
 import type { CatalogCompany } from './catalog.ts'
+import { contactSummary, recipientChoices, routesOf, VERIFICATION_LABEL } from './contacts.ts'
 import type { Profile, ProjectRecord } from './store.ts'
 import { roleNeeds, studentCredit, projectWeight, defaultRole, ROLE_LABEL, type RoleFamily, type StudentFacts } from './suitability.ts'
 import { conceptsIn } from './suitability.ts'
 
 export type AttachmentKind = 'RESUME' | 'CV' | 'COVER_LETTER' | 'REFERRAL_LETTER'
-export interface Draft { to: string | null; toNote: string; subject: string; body: string; roleTitle: string; field: string; role: RoleFamily; speculative: boolean; attachments: AttachmentKind[]; words: number }
-export interface DraftOptions { role?: RoleFamily | null; attachments?: AttachmentKind[]; includeAvailability?: boolean }
+export type RecipientMode = 'VERIFIED' | 'GENERAL_FALLBACK' | 'MANUAL' | 'NONE'
+export interface Draft { to: string | null; toNote: string; toMode: RecipientMode; toWarning: string | null; toKey: string | null; recipients: ReturnType<typeof recipientChoices>; portal: { url: string; label: string; verified: boolean } | null; subject: string; body: string; roleTitle: string; field: string; role: RoleFamily; speculative: boolean; attachments: AttachmentKind[]; words: number }
+export interface DraftOptions { role?: RoleFamily | null; attachments?: AttachmentKind[]; includeAvailability?: boolean; /** Route key chosen by the user. Overrides the automatic choice. */ recipientKey?: string | null }
 
 const AREA: Record<RoleFamily, string> = {
   DATA_ANALYTICS: 'data analytics', DATA_SCIENCE_ML: 'data science and machine learning', DATA_ENGINEERING: 'data engineering', AI_INTEGRATION: 'artificial intelligence',
@@ -143,9 +145,15 @@ export const attachmentSentence = (kinds: AttachmentKind[]): string => {
 }
 
 export function draftEmail(p: Profile, c: CatalogCompany, opts: DraftOptions = {}): Draft {
-  const k = c.contacts
-  const to = k.hrEmail ?? k.generalEmail ?? null
-  const toNote = k.hrEmail ? 'Public HR email from the research file' : k.generalEmail ? 'General organisation email, not a confirmed recruitment address' : 'No verified public recruitment email available.'
+  // Recipient: only a verified recruitment address, or an official general address as a labelled fallback, is filled in. Anything else is the user's explicit choice.
+  const cs = contactSummary(c); const choices = recipientChoices(c)
+  const chosen = opts.recipientKey ? choices.find((x) => x.key === opts.recipientKey) : undefined
+  let to: string | null = null, toMode: RecipientMode = 'NONE', toKey: string | null = null, toWarning: string | null = null, toNote = 'No verified recruitment address is available. Use the portal or choose a researched contact.'
+  if (chosen) { to = chosen.email; toKey = chosen.key; toMode = 'MANUAL'; toWarning = chosen.warning; toNote = `You chose: ${chosen.label} (${VERIFICATION_LABEL[chosen.verification as keyof typeof VERIFICATION_LABEL]})` }
+  else if (cs.recipient) { to = cs.recipient.route.value; toKey = cs.recipient.route.key; toMode = cs.recipient.mode; toWarning = cs.recipient.mode === 'GENERAL_FALLBACK' ? 'General contact fallback, not HR. Ask them to forward your enquiry to HR or industrial training.' : null
+    toNote = cs.recipient.mode === 'VERIFIED' ? `${cs.recipient.route.label}. Independently checked${cs.recipient.route.checkedOn ? ` on ${cs.recipient.route.checkedOn}` : ''}.` : `${cs.recipient.route.label}. Independently checked as a general contact.` }
+  const portalRoute = routesOf(c).find((r) => r.kind === 'PORTAL' && r.tier === 'E3' && r.verification !== 'INVALID' && r.verification !== 'CONFLICTING')
+  const portal = portalRoute ? { url: portalRoute.value, label: portalRoute.label, verified: portalRoute.verification === 'CHECKED_CURRENT' || portalRoute.verification === 'USER_CONFIRMED' } : null
   const role = opts.role ?? defaultRole(facts(p), c)
   // Only a verified current opening is an application. Historical, recurring or merely reported programmes are enquiries.
   const advertised = c.internship.evidence === 'ACTIVE_OPENING'
@@ -177,7 +185,7 @@ export function draftEmail(p: Profile, c: CatalogCompany, opts: DraftOptions = {
   const body = ['Dear Hiring Manager,', '', intro, '', p2, '', p3, '', ...sig].join('\n')
   const subject = advertised ? `Application for ${title} Internship — ${full}` : `Internship Enquiry — ${field.replace(/\b(?!and\b)\w/g, (m) => m.toUpperCase())} — ${full}`
   const words = wordCount(body.split('\n').slice(2, -3).join(' '))
-  return { to, toNote, subject, body, roleTitle: title, field, role, speculative: !advertised, attachments, words }
+  return { to, toNote, toMode, toWarning, toKey, recipients: choices, portal, subject, body, roleTitle: title, field, role, speculative: !advertised, attachments, words }
 }
 
 export { ROLE_LABEL }
