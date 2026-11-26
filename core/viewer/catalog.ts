@@ -46,6 +46,8 @@ export interface CatalogCompany {
   sourceClaims?: { adamScore: number | null; akifScore: number | null; note: string }
   /** HR and internship contact research with provenance. See contacts.ts. Never overwritten by a company-list import. */
   contactIntel?: import('./contacts.ts').ContactIntel
+  /** Audited physical location. Absent until the location audit is imported; then the old city claim is read as provisional. See location.ts. */
+  location?: import('./location.ts').LocationRecord
   /** Earlier records folded into this one (same organisation, corrected location or renumbered). Old ids still resolve to this company. */
   mergedFrom?: { id: string; leadId: string | null; city: string | null; name: string; note: string }[]
   /** True when the organisation came from the 'missing prior leads' list and is not yet verified. */

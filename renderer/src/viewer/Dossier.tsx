@@ -11,6 +11,7 @@ import { useV } from './vctx'
 import { MatchPanel, type RoleInfo } from './Match'
 import { CvStudio } from './CvStudio'
 import { ContactPanel } from './ContactPanel'
+import { LocationPanel } from './LocationPanel'
 import { ROLE_OPTIONS } from './labels'
 
 const SECTOR = { GOVERNMENT: 'Government', NON_GOVERNMENT: 'Non-government', UNKNOWN: 'Unclassified' } as const
@@ -54,7 +55,7 @@ export function Dossier({ c }: { c: any }) {
   const cs = cx.contactSummary
   const bestEmail = cs?.best?.kind === 'EMAIL' && cs.state !== 'PENDING' ? cs.best.value : null
   const amount = a.monthlyMin != null ? `${a.monthlyMin}${a.monthlyMax && a.monthlyMax !== a.monthlyMin ? `–${a.monthlyMax}` : ''}` : null
-  const kind = [c.city, SECTOR[c.sector as keyof typeof SECTOR], ...c.classes.map((x: string) => CLASS_LABEL[x] ?? x)].filter(Boolean).join(' · ')
+  const kind = [c.locationInfo?.verified ? c.locationInfo.zoneLabel : c.locationInfo?.statusLabel, SECTOR[c.sector as keyof typeof SECTOR], ...c.classes.map((x: string) => CLASS_LABEL[x] ?? x)].filter(Boolean).join(' · ')
   return (
     <article key={c.id} className="anim-detail pb-12" data-testid="dossier" aria-label={`${c.name} details`}>
       <header>
@@ -73,6 +74,7 @@ export function Dossier({ c }: { c: any }) {
       </header>
 
       <div className="mt-6"><MatchPanel key={profileId + c.id} profileId={profileId} companyId={c.id} role={role} onRole={setRole} /></div>
+      <div className="mt-4"><LocationPanel key={c.id} c={c} /></div>
       <div className="mt-4"><ContactPanel c={cx} onChange={(n) => { setCx(n); setRecipientKey(null) }} onUseEmail={useEmail} /></div>
 
       {/* The three things you decide on, side by side and set apart by rules, not boxes. */}
@@ -101,7 +103,7 @@ export function Dossier({ c }: { c: any }) {
       <Chapter id="s-company" title="Company information" note="Who they are and what they do.">
         <Fact label="Organisation" value={c.name} copy={c.name} />
         <Fact label="Website" value={c.website} copy={c.website} link={c.website} mono />
-        <Fact label="Office address" value={office ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{office.address}<span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] text-muted"><Mark kind={officeMark(office.status)} />{OFFICE_LABEL[office.status]}</span></span> : null} copy={office?.address} />
+        <Fact label="Recorded address" value={office ? <span className="inline-flex flex-wrap items-baseline gap-x-2">{office.address}<span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] text-muted"><Mark kind={officeMark(office.status)} />{OFFICE_LABEL[office.status]}</span></span> : null} copy={office?.address} />
         <Fact label="Industry" value={c.industry} empty="Not recorded" />
         <Fact label="Category" value={c.categoryLabel} empty="Not recorded" />
         <Fact label="Size" value={c.size} empty="Not recorded" />

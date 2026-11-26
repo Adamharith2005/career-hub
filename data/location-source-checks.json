@@ -1,0 +1,1198 @@
+{
+ "checkedOn": "2026-11-26",
+ "results": {
+  "pj-001": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "NACSA | Contact Us"
+  },
+  "pj-002": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Department of Statistics Malaysia"
+  },
+  "pj-003": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Semakan Dokumen LPPSA"
+  },
+  "pj-004": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 18 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Hubungi Kami : | Perbadanan Putrajaya"
+  },
+  "pj-005": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "HUBUNGI KAMI"
+  },
+  "pj-006": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi Jabatan Perkhidmatan Awam - Direktori Pegawai"
+  },
+  "pj-008": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Access Denied"
+  },
+  "pj-009": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 15 address phrases beside the employer name (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-010": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - MyDIGITAL"
+  },
+  "pj-011": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Menara PjH - Putrajaya Holdings"
+  },
+  "pj-012": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 25 address phrases beside the employer name",
+   "via": "curl",
+   "title": "NDLS - Hubungi Kami"
+  },
+  "pj-013": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "SPRM"
+  },
+  "pj-014": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "the address is labelled for a different organisation",
+   "via": "curl",
+   "title": "Lokasi - Institut Penyelidikan Pembangunan Belia Malaysia (IYRES)"
+  },
+  "pj-015": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 21 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Latihan Industri - Portal Rasmi Kementerian Sains, Teknologi Dan Inovasi",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "pj-017": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: net::ERR_CONNECTION_REFUSED at https://)",
+   "via": "chrome",
+   "title": ""
+  },
+  "pj-018": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Access Denied"
+  },
+  "pj-020": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "chrome",
+   "title": "Jabatan Kastam"
+  },
+  "pj-021": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-022": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: net::ERR_CONNECTION_REFUSED at https://)",
+   "via": "chrome",
+   "title": ""
+  },
+  "pj-023": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "How can I contact ST to obtain further details on this matter? | Suruhanjaya Tenaga"
+  },
+  "pj-025": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "NexG Berhad Annual Report 2025 \u2013 Page 201"
+  },
+  "pj-026": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Command Set MyKad &#8211; Portal Jabatan Pendaftaran Negara"
+  },
+  "pj-027": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact us | Heriot-Watt University"
+  },
+  "pj-029": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi Kementerian Pendidikan | Hubungi Kami"
+  },
+  "pj-030": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "KPT - Hubungi Kami"
+  },
+  "pj-031": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 4 address phrases beside the employer name",
+   "via": "curl",
+   "title": "ESD"
+  },
+  "pj-032": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Utama"
+  },
+  "pj-033": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Laman Utama | Portal Rasmi Pejabat Ketua Pendaftar Mahkamah Persekutuan Malaysia"
+  },
+  "pj-034": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 18 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Hubungi Kami - Suruhanjaya Perkhidmatan Awam Malaysia (SPA)"
+  },
+  "pj-035": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "PETA LOKASI (IBU PEJABAT) &#8211; Portal SPR"
+  },
+  "pj-037": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Laman Web MKN"
+  },
+  "pj-040": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi JAKIM - Hubungi Kami"
+  },
+  "pj-041": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 200",
+   "via": "curl",
+   "title": ""
+  },
+  "pj-042": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": "Kementerian Pengangkutan Malaysia"
+  },
+  "pj-043": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: Timeout 35000ms exceeded.)",
+   "via": "chrome",
+   "title": ""
+  },
+  "pj-044": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "KEMENTERIAN PERUMAHAN DAN KERAJAAN TEMPATAN"
+  },
+  "pj-045": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Hubungi Kami - Kementerian Peralihan Tenaga dan Transformasi Air PETRA"
+  },
+  "pj-047": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-049": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Official Portal - Ministry of Foreign Affairs Malaysia"
+  },
+  "pj-051": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Direktori Pegawai"
+  },
+  "pj-052": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Malaysia Federal Legislation"
+  },
+  "pj-053": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Department of Fisheries Malaysia Official Portal"
+  },
+  "pj-055": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: net::ERR_CERT_COMMON_NAME_INVALID at ht)",
+   "via": "chrome",
+   "title": ""
+  },
+  "pj-056": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Lokasi Kami"
+  },
+  "pj-057": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": ""
+  },
+  "pj-058": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "WP Kuala Lumpur/Putrajaya &#8211; MOTAC"
+  },
+  "pj-060": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Kementerian Pembangunan Wanita, Keluarga & Masyarakat"
+  },
+  "pj-061": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Hubungi Kami - Kementerian Pertanian dan Keterjaminan Makanan"
+  },
+  "pj-062": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Biodiversity contact us"
+  },
+  "pj-063": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 18 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | Nexus International School Malaysia"
+  },
+  "pj-065": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Hilton Page Reference Code"
+  },
+  "pj-066": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi KPK"
+  },
+  "pj-068": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Peta Lokasi - Suruhanjaya Perkhidmatan Pendidikan"
+  },
+  "pj-070": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": "Our Branches &#8211; Bank Islam Malaysia Berhad"
+  },
+  "pj-071": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 25 address phrases beside the employer name",
+   "via": "curl",
+   "title": "HUBUNGI KAMI - Portal Rasmi Jabatan Penerangan Malaysia"
+  },
+  "pj-072": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Wilayah Persekutuan Putrajaya"
+  },
+  "pj-073": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name",
+   "via": "curl",
+   "title": "PICC Quick Booking"
+  },
+  "pj-074": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 15 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Jabatan Mufti Wilayah Persekutuan - Peta Lokasi"
+  },
+  "pj-075": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "PDF had no readable text",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-076": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Jabatan Perkhidmatan Veterinar Latihan Dan Kursus",
+   "placement": "SUPPORTED",
+   "placementNote": "direct address evidence: 2 address phrases beside the employer name"
+  },
+  "pj-077": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 24 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Kementerian Perpaduan Negara (KPN)"
+  },
+  "pj-078": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Pages - Contact Us"
+  },
+  "pj-080": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Alamat & Waktu Operasi Kaunter - Portal Rasmi Jabatan Insolvensi Malaysia"
+  },
+  "pj-082": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-084": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "Utama"
+  },
+  "pj-085": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "pj-086": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 24 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi Jabatan Perpaduan Negara dan Integrasi Nasional"
+  },
+  "pj-087": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Suruhanjaya Integriti Agensi Penguatkuasaan - Laman Utama"
+  },
+  "pj-088": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 15 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Find Your Nearest Branch - Bank Muamalat Malaysia Berhad"
+  },
+  "pj-089": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 16 address phrases beside the employer name",
+   "via": "curl",
+   "title": "IBU PEJABAT POLIS DAERAH PUTRAJAYA"
+  },
+  "pj-090": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 3 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Hotels in Putrajaya Malaysia - Dorsett Putrajaya"
+  },
+  "pj-091": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Marina Putrajaya &mdash; Contact Us"
+  },
+  "pj-092": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 200",
+   "via": "chrome",
+   "title": ""
+  },
+  "cy-001": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Deriv Careers | Our office in Cyberjaya",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-002": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Experian Malaysia",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-003": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name",
+   "via": "curl",
+   "title": "DHL IT Jobs Malaysia | DHL IT Services Cyberjaya | DHL ITS",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-004": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 4 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Dell Technologies Privacy Support | Dell Malaysia"
+  },
+  "cy-005": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name",
+   "via": "curl",
+   "title": "TM R&D | Contact Us - Reach Out for Collaboration & Support"
+  },
+  "cy-006": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 6 address phrases beside the employer name",
+   "via": "chrome",
+   "title": "Imprint"
+  },
+  "cy-007": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 403"
+  },
+  "cy-008": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": "",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 403"
+  },
+  "cy-010": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Just a moment...",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 403"
+  },
+  "cy-011": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | Tech Mahindra"
+  },
+  "cy-012": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 25 address phrases beside the employer name",
+   "via": "chrome",
+   "title": "Contact us | Fujitsu Asia Pacific"
+  },
+  "cy-014": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": ""
+  },
+  "cy-015": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "IT Infrastructure Modernisation in BFSI - TM One"
+  },
+  "cy-016": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "PDPA Notice"
+  },
+  "cy-017": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 17 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - DNeX",
+   "placement": "SUPPORTED",
+   "placementNote": "direct address evidence: 3 address phrases beside the employer name"
+  },
+  "cy-019": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": "Malaysian Communications And Multimedia Commission (MCMC) | Suruhanjaya Komunikasi dan Mul",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 403"
+  },
+  "cy-020": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name",
+   "via": "curl",
+   "title": "RMK-12 Initiatives | MDEC"
+  },
+  "cy-021": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 15 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Location &#8211; Laman Web Rasmi Jabatan Digital Negara"
+  },
+  "cy-022": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 8 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Pegawai Perhubungan Awam",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-023": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Malaysia, Selangor Darul Ehsan | SICPA",
+   "placement": "PARTIAL",
+   "placementNote": "zone appears but the employer is not named"
+  },
+  "cy-025": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "About Us | AwanBiru Technology Berhad | Malaysia"
+  },
+  "cy-025-2": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "RBC Services aux investisseurs et de tr\u00e9sorerie | Malaisie"
+  },
+  "cy-026": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "third-party directory, job board or news site, not the employer\u2019s own page",
+   "via": "curl",
+   "title": "MEASAT Satellite Systems Sdn Bhd | Pikom"
+  },
+  "cy-027": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | GB Network Solutions Malaysia Web Hosting",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 403"
+  },
+  "cy-028": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "Contact Us | FGV Prodata Systems Sdn Bhd"
+  },
+  "cy-029": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "curl",
+   "title": "S-Core IT Solutions Sdn Bhd"
+  },
+  "cy-030": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact \u00b7 ByteCraft Solutions"
+  },
+  "cy-031": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "ESYNC SOFTWARE SERVICES SDN BHD"
+  },
+  "cy-032": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Tamarix"
+  },
+  "cy-033": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact | KM Software Services"
+  },
+  "cy-034": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Home - UX Solutions Sdn. Bhd."
+  },
+  "cy-035": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 24 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us &#8211; Mapskart Technology Sdn Bhd"
+  },
+  "cy-036": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | GENSE - Software & Digital Solutions"
+  },
+  "cy-037": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact &#8211; Cyber Intelligence"
+  },
+  "cy-038": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Engineering Intern - IX Telecom",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-039": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Cyberview"
+  },
+  "cy-040": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 18 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact &#8211; Futurise"
+  },
+  "cy-041": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 3 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Info - Multimedia University",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-042": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "French Energy Company, ENGIE Sets Up Office at CoPlace 3, Cyberjaya - ENGIE Southeast Asia"
+  },
+  "cy-043": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "third-party directory, job board or news site, not the employer\u2019s own page (source is a PDF document, not a contact page)",
+   "via": "pdf",
+   "title": ""
+  },
+  "cy-044": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Access Denied"
+  },
+  "cy-046": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 18 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | AIMS Data Centre"
+  },
+  "cy-048": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": "STTGDC"
+  },
+  "cy-051": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "the address is labelled for a different organisation",
+   "via": "curl",
+   "title": "Jabatan Standard Malaysia - Latar Belakang"
+  },
+  "cy-052": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 11 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Home"
+  },
+  "cy-053": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 22 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Laurea People&#039;s Signature | One Stop Digital Solutions"
+  },
+  "cy-057": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "chrome",
+   "title": ""
+  },
+  "cy-058": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 22 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - Zen"
+  },
+  "cy-059": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "chrome",
+   "title": "NSS IT"
+  },
+  "cy-060": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 24 address phrases beside the employer name",
+   "via": "curl",
+   "title": "CJ1 Data Centre in Cyberjaya, Selangor | Open DC"
+  },
+  "cy-061": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "CJ1 Data Center Cyberjaya | Colocation Server Malaysia",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-062": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: net::ERR_NAME_NOT_RESOLVED at https://w)",
+   "via": "chrome",
+   "title": ""
+  },
+  "cy-063": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Error 403 Forbidden"
+  },
+  "cy-064": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 25 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Data Centre Solutions - Basis Bay"
+  },
+  "cy-065": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 16 address phrases beside the employer name",
+   "via": "curl",
+   "title": ":: DCD Technology Sdn Bhd ::"
+  },
+  "cy-066": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "third-party directory, job board or news site, not the employer\u2019s own page",
+   "via": "curl",
+   "title": "Longbow Solutions Sdn Bhd &#8211; MMU Career Connect"
+  },
+  "cy-067": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 12 address phrases beside the employer name",
+   "via": "curl",
+   "title": "MyDigital Center"
+  },
+  "cy-068": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 23 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us | Sigma Rectrix Systems (m) Sdn Bhd"
+  },
+  "cy-069": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 17 address phrases beside the employer name",
+   "via": "curl",
+   "title": "About XG Labs Technology: Cyberjaya IT Supplier"
+  },
+  "cy-070": {
+   "checkedOn": "2026-11-26",
+   "office": "UNSUPPORTED",
+   "officeNote": "the page does not show the zone",
+   "via": "curl",
+   "title": ""
+  },
+  "cy-071": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "10 Creative Solutions @ Tamarind Square | Cyberjaya, Malaysia"
+  },
+  "cy-073": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Contact Us | University of Cyberjaya",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "cy-074": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Limkokwing University of Creative Technology"
+  },
+  "cy-075": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Concentrix Locations"
+  },
+  "cy-076": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 5 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Welcome | Champion Global Business Services"
+  },
+  "cy-078": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Our Mission &mdash; Syntx Sdn Bhd"
+  },
+  "cj-009": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 200",
+   "via": "curl",
+   "title": "",
+   "placement": "UNREACHABLE",
+   "placementNote": "HTTP 200"
+  },
+  "new-02": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 13 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Finexus | Kuala Lumpur HQ & ASEAN Offices"
+  },
+  "new-03": {
+   "checkedOn": "2026-11-26",
+   "office": "ZONE_ONLY",
+   "officeNote": "shows the employer in this zone, not the building address",
+   "via": "curl",
+   "title": "Setel Help - How do I book a service appointment?"
+  },
+  "new-06": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Presint Diplomatik Putrajaya &#8211; Pusat Pungutan Zakat-MAIWP"
+  },
+  "new-07": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Access Denied"
+  },
+  "new-08": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 6 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Portal Rasmi Jabatan Wilayah Persekutuan"
+  },
+  "new-09": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Speakers - KWAP",
+   "placement": "ZONE_ONLY",
+   "placementNote": "shows the employer in this zone, not the building address"
+  },
+  "new-10": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "IOI City Towers @ Putrajaya | IOI Properties"
+  },
+  "new-11": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 35 address phrases beside the employer name",
+   "via": "curl",
+   "title": "IOI Group: Contact Us"
+  },
+  "new-14": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP 403",
+   "via": "curl",
+   "title": "Access Denied"
+  },
+  "new-15": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 30 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us - IOI City Mall Sdn Bhd"
+  },
+  "new-16": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "Palm Garden Golf Club @ Putrajaya | IOI Properties"
+  },
+  "new-17": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "Pertanika Journal"
+  },
+  "prior-kometsoft": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 14 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Welcome to Kometsoft (M) Sdn. Bhd."
+  },
+  "prior-cet": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "curl",
+   "title": "CET"
+  },
+  "prior-exis-group": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 26 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact EXIS Group Malaysia | Business Enquiries"
+  },
+  "prior-caceis": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 10 address phrases beside the employer name",
+   "via": "curl",
+   "title": "CACEIS - Malaysia"
+  },
+  "prior-myi-technologies": {
+   "checkedOn": "2026-11-26",
+   "office": "UNREACHABLE",
+   "officeNote": "HTTP no response (page.goto: net::ERR_CERT_AUTHORITY_INVALID at http)",
+   "via": "chrome",
+   "title": ""
+  },
+  "prior-crossroad-solutions": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 15 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact &#8211; Crossroad Solutions"
+  },
+  "prior-invenico-asia": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 20 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Invenico Asia Sdn Bhd"
+  },
+  "prior-nais-technologies": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 22 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact NAIS Technologies"
+  },
+  "prior-century-software": {
+   "checkedOn": "2026-11-26",
+   "office": "PARTIAL",
+   "officeNote": "address words appear in a list or menu, not an address block",
+   "via": "chrome",
+   "title": "Contact Us - Century Software"
+  },
+  "prior-jaringan-nadi-teknologi": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 22 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Us &#8211; Jaringan Nadi Teknologi"
+  },
+  "prior-igs-protech": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 9 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact &#8211; IGS Protech"
+  },
+  "prior-s5-engineering": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 16 address phrases beside the employer name",
+   "via": "curl",
+   "title": "Contact Information | S5 Engineering Sdn Bhd"
+  },
+  "prior-sqf-diversified": {
+   "checkedOn": "2026-11-26",
+   "office": "SUPPORTED",
+   "officeNote": "direct address evidence: 7 address phrases beside the employer name",
+   "via": "curl",
+   "title": "SQF Diversify Sdn Bhd"
+  }
+ }
+}

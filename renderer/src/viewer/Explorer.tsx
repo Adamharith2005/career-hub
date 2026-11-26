@@ -11,7 +11,9 @@ import { useV } from './vctx'
 
 type F = { q: string; city: string; sector: string; classes: string[]; tech: string[]; allowance: string[]; evidence: string[]; contact: string }
 const EMPTY: F = { q: '', city: 'All', sector: '', classes: [], tech: [], allowance: [], evidence: [], contact: '' }
-const CITIES = ['Cyberjaya', 'Putrajaya', 'IOI Resort City', 'All']
+const CITIES = ['Cyberjaya', 'Putrajaya', 'IOI Resort City', 'Needs verification', 'Outside target area', 'All']
+const CITY_LABEL: Record<string, string> = { 'IOI Resort City': 'Nearby: IOI Resort City', 'Needs verification': 'Needs verification', 'Outside target area': 'Outside area' }
+const LOC_TONE: Record<string, 'ok' | 'info' | 'neutral' | 'warn' | 'bad'> = { VERIFIED_TARGET_OFFICE: 'ok', VERIFIED_NEARBY_OFFICE: 'info', PROVISIONAL_LOCAL_OFFICE: 'warn', UNVERIFIED_LOCATION: 'neutral', OUTSIDE_TARGET_AREA: 'neutral', DISPUTED_LOCATION: 'bad' }
 const TYPE_CHIPS: [string, string, string][] = [['GLC', 'GLC', 'glc'], ['MNC', 'MNC', 'mnc'], ['SME', 'SME', 'sme'], ['STARTUP', 'Startup', 'sme'], ['PLC', 'PLC', 'priv'], ['STATUTORY_BODY', 'Statutory body', 'gov']]
 const MORE_CLASSES = ['MINISTRY', 'DEPARTMENT', 'AGENCY', 'COMMISSION', 'PUBLIC_INSTITUTION', 'PRIVATE', 'UNIVERSITY_RESEARCH']
 const TECH_CHIPS = ['SOFTWARE', 'FULL_STACK', 'CYBERSECURITY', 'CLOUD', 'DEVOPS', 'INFO_SYSTEMS', 'DATA_SCIENCE', 'AI_ML', 'ANALYTICS', 'DATA_ENGINEERING', 'NETWORKING', 'OTHER_CS']
@@ -82,7 +84,7 @@ export function Explorer() {
             <div className="text-right" aria-live="polite" data-testid="result-count"><span className="figure text-[2.1rem] text-primary">{list?.length ?? '…'}</span><span className="ml-1.5 text-[13px] font-semibold text-muted">of {meta?.total ?? '…'} organisations{busy && <Loader2 size={13} className="spin ml-1.5 inline" aria-label="Updating" />}</span></div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <Segmented label="Location" value={f.city} onChange={(city) => set({ city })} options={CITIES.map((c) => ({ key: c, label: c === 'All' ? 'All' : c, count: fx && c !== 'All' ? fx.cities[c] : undefined }))} />
+            <Segmented label="Location" value={f.city} onChange={(city) => set({ city })} options={CITIES.map((c) => ({ key: c, label: CITY_LABEL[c] ?? c, count: fx ? fx.cities[c] : undefined }))} />
             <div className="relative min-w-[190px] flex-1 sm:max-w-[280px]">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" aria-hidden />
               <input aria-label="Search companies" data-testid="search" value={f.q} onChange={(e) => set({ q: e.target.value })} placeholder="Search companies or roles" className="h-9 w-full rounded-xl border border-line-strong bg-surface pl-9 pr-3 text-sm placeholder:text-faint focus-visible:border-primary" />
@@ -115,13 +117,13 @@ export function Explorer() {
         <section aria-label="Companies" className="flex min-h-0 flex-col border-r border-line">
           {picked.length > 0 && <div className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-muted"><span className="flex-1">{picked.length} chosen to compare</span><Button size="sm" variant="primary" disabled={picked.length < 2} onClick={() => setCmp(true)} icon={<Scale size={14} aria-hidden />} data-testid="compare-btn">Compare ({picked.length})</Button></div>}
           <ul className={cx('scroll-thin min-h-0 flex-1 overflow-y-auto pb-6', !dense && 'space-y-2.5 p-3')} data-testid="company-list">
-            {list && list.length === 0 && <li className="p-5"><Empty title="No organisations match" icon={<Search size={18} aria-hidden />}>Clear a filter or search for a different word.</Empty></li>}
+            {list && list.length === 0 && <li className="p-5" data-testid="empty-list"><Empty title={['Cyberjaya', 'Putrajaya', 'IOI Resort City'].includes(f.city) ? 'No verified offices here yet' : 'No organisations match'} icon={<Search size={18} aria-hidden />}>{['Cyberjaya', 'Putrajaya', 'IOI Resort City'].includes(f.city) ? 'Only organisations with a verified physical office in this area are listed. The others are in Needs verification, and every organisation is under All.' : 'Clear a filter or search for a different word.'}</Empty></li>}
             {list?.map((c, i) => dense ? (
               <li key={c.id} className="co-row has-reveal group flex items-center gap-3 py-2 pl-3 pr-3" aria-current={selected === c.id} style={{ animation: i < 14 ? `stagger-in 240ms var(--ease) ${i * 18}ms both` : undefined }}>
                 <button className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => select(c.id)} data-testid="company-row" aria-current={selected === c.id}>
                   <span className={cx('figure w-9 shrink-0 text-center text-[15px]', c.match ? `tier-${c.match.tier.toLowerCase()} tier-text` : 'text-faint')} title={c.match ? `${c.match.score}% match, ${c.match.roleLabel}${c.match.provisional ? ' (provisional)' : ''}` : ''}>{c.match ? c.match.score : '–'}{c.match?.provisional && <sup aria-label="provisional">?</sup>}</span>
                   <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={cx('dot', dotFor(c))} aria-hidden /><span className="truncate text-[14px] font-bold">{c.name}</span></span>
-                    <span className="block truncate text-[12px] text-muted">{[c.city, kindText(c), c.match?.roleLabel].filter(Boolean).join(' · ')}</span></span>
+                    <span className="block truncate text-[12px] text-muted">{[c.location?.verified ? c.location.zone : null, kindText(c), c.match?.roleLabel].filter(Boolean).filter(Boolean).join(' · ')}</span></span>
                   {c.contact && <span className="hidden shrink-0 min-[1250px]:block"><Badge tone={CONTACT_TONE[c.contact.state]} className="text-[11px]">{c.contact.label}</Badge></span>}
                 </button>
                 <input type="checkbox" aria-label={`Compare ${c.name}`} checked={picked.includes(c.id)} disabled={!picked.includes(c.id) && picked.length >= 4} onChange={() => setPicked(toggle(picked, c.id))} className="h-3.5 w-3.5 accent-[var(--primary)]" />
@@ -131,8 +133,9 @@ export function Explorer() {
                 <div className="flex items-start gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => select(c.id)} data-testid="company-row" aria-current={selected === c.id}>
                     <span className="flex items-center gap-2"><span className={cx('dot', dotFor(c))} aria-hidden /><span className="truncate text-[15px] font-extrabold leading-snug">{c.name}</span></span>
-                    <span className="mt-0.5 block truncate text-[12.5px] text-muted">{[c.city, kindText(c), ...c.classes.slice(0, 1).map((k: string) => CLASS_LABEL[k] ?? k)].join(' · ')}</span>
+                    <span className="mt-0.5 block truncate text-[12.5px] text-muted">{[c.location?.verified ? c.location.zone : null, kindText(c), ...c.classes.slice(0, 1).map((k: string) => CLASS_LABEL[k] ?? k)].filter(Boolean).join(' · ')}</span>
                     {c.tech.length > 0 && <span className="mt-0.5 block truncate text-[12.5px] text-muted">{c.tech.slice(0, 3).map((t: string) => TECH_LABEL[t]).join(', ')}</span>}
+                    {c.location && !c.location.verified && <span className="mt-2 block"><Badge tone={LOC_TONE[c.location.status]} className="text-[11.5px]"><span data-testid="card-location">{c.location.label}</span></Badge></span>}
                     {c.contact && <span className="mt-2 block"><Badge tone={CONTACT_TONE[c.contact.state]} className="text-[11.5px]"><span data-testid="card-contact">{c.contact.label}</span></Badge></span>}
                     <span className="mt-1.5 flex flex-col gap-0.5 text-[12.5px]">
                       <span className="flex items-center gap-2"><Mark kind={allowanceMark(c.allowanceStatus)} />{c.allowance}</span>

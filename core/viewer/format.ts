@@ -1,5 +1,6 @@
 /** Plain-text formatters for the copy buttons. Only fields that exist are emitted; nothing is invented. */
 import type { CatalogCompany } from './catalog.ts'
+import { STATUS_LABEL, ZONE_LABEL, locationOf, placementLine } from './location.ts'
 import { TECH_LABEL } from './catalog.ts'
 import { contactSummary, VERIFICATION_LABEL } from './contacts.ts'
 
@@ -53,11 +54,17 @@ export function applicationText(c: CatalogCompany): string {
   ].filter(Boolean).join('\n')
 }
 
+/** Location as an honest statement: what is verified, what is only claimed, and where interns sit. */
+function locationText(c: CatalogCompany): string {
+  const l = locationOf(c)
+  const where = l.physical_office_zone === 'UNKNOWN' || l.physical_office_zone === 'OUTSIDE' ? '' : ` in ${ZONE_LABEL[l.physical_office_zone]}`
+  return `${STATUS_LABEL[l.physical_office_status]}${where}. ${placementLine(l)}`
+}
 export function companyDetailsText(c: CatalogCompany): string {
   const office = c.offices[0]
   return [
     c.name, c.legalEntity && c.legalEntity !== c.name ? line('Legal entity', c.legalEntity) : null,
-    line('Location', c.city), `Sector: ${c.sector === 'GOVERNMENT' ? 'Government / public sector' : c.sector === 'NON_GOVERNMENT' ? 'Non-government' : 'Unclassified'}`,
+    line('Location', locationText(c)), `Sector: ${c.sector === 'GOVERNMENT' ? 'Government / public sector' : c.sector === 'NON_GOVERNMENT' ? 'Non-government' : 'Unclassified'}`,
     line('Category', c.categoryLabel), line('Industry', c.industry), line('Website', c.website),
     office ? `Address: ${office.address}${office.status !== 'VERIFIED' ? ' (not verified)' : ''}` : null,
     c.tech.length ? `Relevant technical areas: ${c.tech.map((t) => TECH_LABEL[t]).join(', ')}` : null,

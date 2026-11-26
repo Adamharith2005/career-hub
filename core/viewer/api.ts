@@ -11,6 +11,7 @@ import { renderCv } from './cvpdf.ts'
 import type { ResumeAST } from '../resume.ts'
 import { applyContactResearch, contactSummary, emptyOverrides, missingCsv, missingEmployers, missingFileName, readContactResearch, readOverrides, recipientChoices, withOverrides, writeOverrides, type ContactState } from './contacts.ts'
 import { compare, type CompareInput, type Priority } from '../compare.ts'
+import { AUDIT_FILE, AUDIT_INPUT_FILE, LOCATION_STATUSES, LOCATION_ZONES, OFFICE_TYPES, PLACEMENT_LABEL, STATUS_LABEL, ZONE_LABEL, applyLocationAudit, auditInputCsv, inLocationView, isVerifiedLocation, legacyFlags, locationCounts, locationOf, parseAudit, placementLine, placementStatus, readLocationOverrides, withLocationOverrides, writeLocationOverrides, type LocationRecord } from './location.ts'
 
 export class ViewerApiError extends Error { constructor(m: string, public code = 'ERROR') { super(m) } }
 
@@ -37,16 +38,21 @@ export function createViewerApi(env: ViewerEnv) {
   const catFile = path.join(env.userDataDir, 'viewer', 'catalog.json')
   const ovFile = path.join(env.userDataDir, 'viewer', 'contact-overrides.json')
   let ov = readOverrides(ovFile)
+  const locFile = path.join(env.userDataDir, 'viewer', 'location-overrides.json')
+  let locOv = readLocationOverrides(locFile)
   let cache: Catalog | null = null
   const emptyCat = (): Catalog => ({ version: 1, generatedAt: '', sourceFile: '', sourceSha256: null, companies: [] })
   /** The company list on disk. A user-applied list keeps working, and gets contact research from the bundled list where it has none. */
   const baseCatalog = (): Catalog => {
     const user = readCatalog(catFile), bundled = readCatalog(env.bundledCatalog)
-    if (user && bundled) { const bm = new Map(bundled.companies.map((c) => [c.id, c])); return { ...user, companies: user.companies.map((c) => (!c.contactIntel && bm.get(c.id)?.contactIntel ? { ...c, contactIntel: bm.get(c.id)!.contactIntel } : c)) } }
+    if (user && bundled) {
+      const bm = new Map(bundled.companies.map((c) => [c.id, c]))
+      return { ...user, companies: user.companies.map((c) => { const b = bm.get(c.id); let m = c; if (!m.contactIntel && b?.contactIntel) m = { ...m, contactIntel: b.contactIntel }; if (!m.location && b?.location) m = { ...m, location: b.location }; return m }) }
+    }
     return reconcileDuplicates(user ?? bundled ?? emptyCat()).catalog
   }
   let baseCache: Catalog | null = null
-  const catalog = (): Catalog => cache ??= (() => { const b = (baseCache ??= baseCatalog()); return { ...b, companies: withOverrides(b.companies, ov) } })()
+  const catalog = (): Catalog => cache ??= (() => { const b = (baseCache ??= baseCatalog()); return { ...b, companies: withLocationOverrides(withOverrides(b.companies, ov), locOv) } })()
   const company = (id: string) => { const c = catalog().companies.find((x) => x.id === id) ?? catalog().companies.find((x) => x.mergedFrom?.some((m) => m.id === id)); if (!c) throw new ViewerApiError('Unknown company.', 'NOT_FOUND'); return c }
   const guard = <T>(fn: () => T): T => { try { return fn() } catch (e) { if (e instanceof StoreError) throw new ViewerApiError(e.message, e.code); throw e } }
   /** Documents that really exist for this person and company. Nothing is offered that cannot be attached. */
@@ -89,8 +95,10 @@ export function createViewerApi(env: ViewerEnv) {
     const allowance: Record<string, number> = {}; for (const c of cs) allowance[c.allowance.status] = (allowance[c.allowance.status] ?? 0) + 1
     const evidence: Record<string, number> = {}; for (const c of cs) evidence[c.internship.evidence] = (evidence[c.internship.evidence] ?? 0) + 1
     const contact: Record<string, number> = {}; for (const c of cs) { const k = contactSummary(c).state; contact[k] = (contact[k] ?? 0) + 1 }
-    return { total: cs.length, contact, cities: { Cyberjaya: n((c) => c.city === 'Cyberjaya'), Putrajaya: n((c) => c.city === 'Putrajaya'), 'IOI Resort City': n((c) => c.city === 'IOI Resort City') }, sector: { GOVERNMENT: n((c) => c.sector === 'GOVERNMENT'), NON_GOVERNMENT: n((c) => c.sector === 'NON_GOVERNMENT') }, classes, tech, allowance, evidence }
+    return { total: cs.length, contact, cities: locationCounts(cs), locationStatus: Object.fromEntries(LOCATION_STATUSES.map((st) => [st, n((c) => locationOf(c).physical_office_status === st)])), sector: { GOVERNMENT: n((c) => c.sector === 'GOVERNMENT'), NON_GOVERNMENT: n((c) => c.sector === 'NON_GOVERNMENT') }, classes, tech, allowance, evidence }
   }
+
+  const locationInfo = (c: CatalogCompany) => { const l = locationOf(c); const p = placementStatus(l); return { ...l, statusLabel: STATUS_LABEL[l.physical_office_status], zoneLabel: ZONE_LABEL[l.physical_office_zone], verified: isVerifiedLocation(l.physical_office_status), placement: p, placementLabel: PLACEMENT_LABEL[p], placementLine: placementLine(l), claimedCity: c.city, flags: legacyFlags(c) } }
 
   const h = {
     // ---- profiles
@@ -144,9 +152,11 @@ export function createViewerApi(env: ViewerEnv) {
       const student = a?.profileId ? guard(() => store.get(a.profileId!)) : null
       const CONTACT_FILTER: Record<string, ContactState> = { VERIFIED_EMAIL: 'VERIFIED_EMAIL', GENERAL_EMAIL: 'GENERAL_EMAIL', PORTAL: 'PORTAL', PENDING: 'PENDING', NONE: 'NONE' }
       const want = a?.contact && CONTACT_FILTER[a.contact]
-      const rows = filterCatalog(catalog().companies, a ?? {}).map((c) => ({ c, cs: contactSummary(c) })).filter(({ cs }) => !want || cs.state === want).map(({ c, cs }) => {
+      const view = (a as any)?.location ?? a?.city
+      const rows = filterCatalog(catalog().companies, { ...(a ?? {}), city: undefined }).filter((c) => inLocationView(c, view)).map((c) => ({ c, cs: contactSummary(c) })).filter(({ cs }) => !want || cs.state === want).map(({ c, cs }) => {
         const m = student ? suitability(student, c, a.role) : null
-        return { id: c.id, name: c.name, city: c.city, sector: c.sector, classes: c.classes, tech: c.tech, allowanceStatus: c.allowance.status, allowance: allowanceHeadline(c), allowanceMin: c.allowance.status === 'CONFIRMED_PAID' || c.allowance.status === 'HISTORICAL' ? c.allowance.monthlyMin : null, evidence: c.internship.evidence, verification: c.verificationLevel, categoryLabel: c.categoryLabel, hasEmail: !!(c.contacts.hrEmail || c.contacts.generalEmail), priorLead: !!c.priorLead,
+        const lo = locationOf(c)
+        return { id: c.id, name: c.name, city: c.city, location: { status: lo.physical_office_status, label: STATUS_LABEL[lo.physical_office_status], zone: ZONE_LABEL[lo.physical_office_zone], verified: isVerifiedLocation(lo.physical_office_status), placement: placementStatus(lo), placementLabel: PLACEMENT_LABEL[placementStatus(lo)] }, sector: c.sector, classes: c.classes, tech: c.tech, allowanceStatus: c.allowance.status, allowance: allowanceHeadline(c), allowanceMin: c.allowance.status === 'CONFIRMED_PAID' || c.allowance.status === 'HISTORICAL' ? c.allowance.monthlyMin : null, evidence: c.internship.evidence, verification: c.verificationLevel, categoryLabel: c.categoryLabel, hasEmail: !!(c.contacts.hrEmail || c.contacts.generalEmail), priorLead: !!c.priorLead,
           match: m && { score: m.score, tier: m.tier, provisional: m.provisional, confidence: m.confidence, role: m.role, roleLabel: m.roleLabel }, contact: { state: cs.state, label: cs.label, tone: cs.tone, historical: cs.historical, needsResearch: cs.needsResearch }, _ease: cs.readiness, _tech: m ? m.dimensions[1].value + m.dimensions[0].value : 0, _conf: m ? m.dimensions[5].value : 0 }
       })
       const key = a?.sort ?? (student ? 'match' : null)
@@ -159,7 +169,7 @@ export function createViewerApi(env: ViewerEnv) {
     },
     'v.match.explain': async (a: { profileId: string; companyId: string; role?: RoleFamily }) => guard(() => suitability(store.get(a.profileId), company(a.companyId), a.role)),
     'v.match.roles': async (a: { profileId: string; companyId: string }) => guard(() => { const c = company(a.companyId); const offered = companyRoles(c); return { offered: offered.map((r) => ({ id: r, label: ROLE_LABEL[r] })), all: (Object.keys(ROLE_LABEL) as RoleFamily[]).map((r) => ({ id: r, label: ROLE_LABEL[r] })), default: defaultRole(store.get(a.profileId), c) } }),
-    'v.companies.get': async (a: { id: string }) => { const c = company(a.id); return { ...c, contactSummary: contactSummary(c), recipientChoices: recipientChoices(c) } },
+    'v.companies.get': async (a: { id: string }) => { const c = company(a.id); return { ...c, locationInfo: locationInfo(c), contactSummary: contactSummary(c), recipientChoices: recipientChoices(c) } },
     'v.companies.compare': async (a: { ids: string[]; priority?: Priority }) => {
       if (!Array.isArray(a.ids) || a.ids.length < 2 || a.ids.length > 4) throw new ViewerApiError('Choose 2 to 4 organisations to compare.', 'BAD_INPUT')
       return compare(a.ids.map((i) => toCompare(company(i))), a.priority ?? 'balanced', new Date())
@@ -186,6 +196,34 @@ export function createViewerApi(env: ViewerEnv) {
       let exported: string | null = null
       if (env.exportsDir) { fs.mkdirSync(env.exportsDir, { recursive: true }); const miss = missingEmployers(merged); for (const f of fs.readdirSync(env.exportsDir)) if (/^CAREER_HUB_MISSING_\d+_CONTACT_RESEARCH\.csv$/.test(f)) fs.rmSync(path.join(env.exportsDir, f)); exported = path.join(env.exportsDir, missingFileName(miss.length)); fs.writeFileSync(exported, missingCsv(miss)) }
       return { ...report, warnings: report.warnings.slice(0, 20), exported }
+    },
+    // ---- physical location audit
+    'v.location.import': async () => {
+      if (!env.researchDir) throw new ViewerApiError('No research folder is configured.', 'BAD_INPUT')
+      const file = path.join(env.researchDir, AUDIT_FILE)
+      if (!fs.existsSync(file)) throw new ViewerApiError(`${AUDIT_FILE} was not found in ${env.researchDir}.`, 'BAD_FILE')
+      const audit = parseAudit(fs.readFileSync(file, 'utf8'))
+      if (audit.errors.length && !audit.rows.length) throw new ViewerApiError(audit.errors.slice(0, 3).join(' '), 'BAD_FILE')
+      const { catalog: merged, report } = applyLocationAudit(baseCatalog(), audit, locOv)
+      writeCatalog(catFile, merged); baseCache = merged; cache = null
+      return { ...report, errors: report.errors.slice(0, 20), warnings: report.warnings.slice(0, 20), unmatched: report.unmatched.slice(0, 20) }
+    },
+    'v.location.confirm': async (a: { companyId: string; status: string; zone: string; address?: string; officeType?: string; sourceUrl?: string; sourceDate?: string; note?: string; clear?: boolean }) => guard(() => {
+      const c = company(a.companyId)
+      if (a.clear) { delete locOv.confirmed[c.id]; writeLocationOverrides(locFile, locOv); cache = null; return locationInfo(company(a.companyId)) }
+      if (!LOCATION_STATUSES.includes(a.status as any) || !LOCATION_ZONES.includes(a.zone as any)) throw new ViewerApiError('Choose a valid status and zone.', 'BAD_INPUT')
+      const ot = (a.officeType ?? 'UNKNOWN') as LocationRecord['office_type']; if (!OFFICE_TYPES.includes(ot)) throw new ViewerApiError('Unknown office type.', 'BAD_INPUT')
+      const verified = isVerifiedLocation(a.status as any)
+      if (verified && (!a.address?.trim() || !a.sourceUrl?.trim() || !a.sourceDate)) throw new ViewerApiError('A verified office needs an address, a source link and the date of the source.', 'BAD_INPUT')
+      const today = new Date().toISOString().slice(0, 10)
+      const location: LocationRecord = { physical_office_status: a.status as any, physical_office_address: a.address?.trim() || null, physical_office_zone: a.zone as any, office_type: ot, office_source_url: a.sourceUrl?.trim() || null, office_source_date: a.sourceDate || null, office_last_checked: today,
+        local_workplace_confirmed: verified ? true : null, internship_placement_location: null, internship_placement_source_url: null, location_review_notes: a.note?.trim() || 'Confirmed by you in Career Hub.', office_source_check: null, office_source_check_note: null, placement_source_check: null, evidence_flags: [], origin: 'USER_CONFIRMED' }
+      locOv.confirmed[c.id] = { location, at: new Date().toISOString() }; writeLocationOverrides(locFile, locOv); cache = null
+      return locationInfo(company(a.companyId))
+    }),
+    'v.location.export': async () => {
+      if (!env.exportsDir) throw new ViewerApiError('No export folder is configured.', 'BAD_INPUT')
+      fs.mkdirSync(env.exportsDir, { recursive: true }); const out = path.join(env.exportsDir, AUDIT_INPUT_FILE); fs.writeFileSync(out, auditInputCsv(catalog().companies)); return { path: out, rows: catalog().companies.length }
     },
     'v.copy.apply': async (a: { id: string }) => applicationText(company(a.id)),
     'v.copy.allowance': async (a: { id: string }) => allowanceText(company(a.id)),

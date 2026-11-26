@@ -8,6 +8,7 @@ import path from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 import { makeCvPdf } from '../tests/helpers.ts'
 import { contactSummary } from '../core/viewer/contacts.ts'
+import { STATUS_LABEL, inLocationView, locationOf } from '../core/viewer/location.ts'
 
 const OUT = path.resolve('test-output'); const SHOTS = path.join(OUT, 'screens'); fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true })
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'careerhub-e2e-'))
@@ -27,7 +28,7 @@ fs.writeFileSync(seed, JSON.stringify({ version: 1, profiles: [
     otherRepos: [], experience: [], leadership: [], languages: [], interests: ['Software Engineering', 'Cybersecurity', 'Cloud Computing'], internshipWindow: '', availabilityPhrase: '', reviewNotes: [], documents: [] }] }))
 
 const CAT: any[] = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'catalog.json'), 'utf8')).companies
-const N = CAT.length, N_CY = CAT.filter((c) => c.city === 'Cyberjaya').length, N_PJ = CAT.filter((c) => c.city === 'Putrajaya').length, N_IOI = CAT.filter((c) => c.city === 'IOI Resort City').length
+const N = CAT.length, N_CY = CAT.filter((c) => inLocationView(c, 'Cyberjaya')).length, N_PJ = CAT.filter((c) => inLocationView(c, 'Putrajaya')).length, N_IOI = CAT.filter((c) => inLocationView(c, 'IOI Resort City')).length, N_NEEDS = CAT.filter((c) => inLocationView(c, 'Needs verification')).length, N_OUT = CAT.filter((c) => inLocationView(c, 'Outside target area')).length
 const N_GOV = CAT.filter((c) => c.sector === 'GOVERNMENT').length, N_NON = CAT.filter((c) => c.sector === 'NON_GOVERNMENT').length
 const results: { name: string; ok: boolean; detail?: string }[] = []
 const errors: string[] = []
@@ -83,11 +84,45 @@ await step('navigation is minimal and has no tracker, kanban or CRM', async () =
 })
 
 console.log('\nExplorer')
-await step('location filter: Cyberjaya, Putrajaya, IOI Resort City, All', async () => {
-  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^Cyberjaya/ }).click(); await waitCount(page, N_CY)
-  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^Putrajaya/ }).click(); await waitCount(page, N_PJ)
-  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^IOI Resort City/ }).click(); await waitCount(page, N_IOI)
-  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: 'All', exact: true }).click(); await waitCount(page, N)
+await step('location views: verified offices only in Cyberjaya/Putrajaya/Nearby; every company still reachable', async () => {
+  const seg = page.getByRole('group', { name: 'Location' })
+  if (N_CY + N_PJ + N_IOI + N_NEEDS + N_OUT !== N) throw new Error('every company must sit in exactly one location view')
+  if (N_NEEDS === 0) throw new Error('expected unaudited companies to be reachable under Needs verification')
+  await seg.getByRole('button', { name: /^Cyberjaya/ }).click(); await waitCount(page, N_CY)
+  if (N_CY === 0) await page.getByTestId('empty-list').getByText(/Only organisations with a verified physical office/).waitFor()
+  await shot(page, '03b-location-cyberjaya-empty')
+  await seg.getByRole('button', { name: /^Putrajaya/ }).click(); await waitCount(page, N_PJ); await shot(page, '03e-location-putrajaya-verified')
+  await seg.getByRole('button', { name: /^Nearby: IOI Resort City/ }).click(); await waitCount(page, N_IOI); await shot(page, '03f-location-ioi-verified')
+  await seg.getByRole('button', { name: /^Needs verification/ }).click(); await waitCount(page, N_NEEDS); await shot(page, '03c-location-needs-verification')
+  await seg.getByRole('button', { name: /^Outside area/ }).click(); await waitCount(page, N_OUT)
+  await seg.getByRole('button', { name: /^All/ }).click(); await waitCount(page, N)
+})
+const locRow = async (term: string, has: string) => { await nav(page, 'Explore Companies'); await page.getByTestId('search').fill(term); await page.getByTestId('company-row').filter({ hasText: has }).first().click(); await page.getByTestId('dossier-title').filter({ hasText: has }).waitFor() }
+await step('location panel: provisional, disputed and project-site records are never shown as verified', async () => {
+  for (const [term, has, status] of [['Mesiniaga', 'Mesiniaga', 'DISPUTED_LOCATION'], ['AIA Shared', 'AIA Shared Services', 'DISPUTED_LOCATION'], ['Theta Edge', 'Theta Edge', 'DISPUTED_LOCATION'], ['Setel', 'Setel Ventures', locationOf(CAT.find((c) => c.name.includes('Setel'))).physical_office_status]] as const) {
+    await locRow(term, has)
+    const panel = page.getByTestId('location-panel'); await panel.waitFor()
+    if ((await panel.getAttribute('data-status')) !== status) throw new Error(`${has}: expected ${status}`)
+    if (!/Neither the office nor the placement/.test(await page.getByTestId('placement-line').innerText())) throw new Error(`${has}: placement must not be implied`)
+    if (/Verified office/.test(await page.getByTestId('location-label').innerText())) throw new Error(`${has}: shown as verified`)
+    if (term === 'Mesiniaga') { await page.getByTestId('location-panel').scrollIntoViewIfNeeded(); await shot(page, '03d-location-panel-disputed') }
+  }
+})
+await step('a user-confirmed office appears in the Cyberjaya view, with placement still unknown, and can be withdrawn', async () => {
+  await locRow('Setel', 'Setel Ventures')
+  await page.getByTestId('location-correct').click()
+  const form = page.getByTestId('location-form')
+  await form.getByLabel('Office address').fill('Test Building, Cyber 1, 63000 Cyberjaya')
+  await form.getByLabel('Source link').fill('https://example.com/office')
+  await form.getByLabel('Source date').fill('2026-11-01')
+  await form.getByRole('button', { name: 'Save my correction' }).click()
+  await page.getByTestId('location-label').filter({ hasText: 'Verified office' }).waitFor()
+  if (!/placement is not confirmed|where interns sit is not confirmed/i.test(await page.getByTestId('placement-line').innerText())) throw new Error('placement must stay unknown')
+  await nav(page, 'Explore Companies'); await page.getByTestId('search').fill(''); await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^Cyberjaya/ }).click(); await waitCount(page, N_CY + 1)
+  await page.getByRole('group', { name: 'Location' }).getByRole('button', { name: /^All/ }).click()
+  await locRow('Setel', 'Setel Ventures'); await page.getByRole('button', { name: 'Remove my correction' }).click()
+  await page.getByTestId('location-label').filter({ hasText: STATUS_LABEL[locationOf(CAT.find((c) => c.name.includes('Setel'))).physical_office_status] }).waitFor()
+  await page.getByTestId('search').fill(''); await waitCount(page, N)
 })
 await step('sector, type, technical, allowance and evidence filters narrow the list', async () => {
   const chips = page.getByRole('group', { name: 'Filters', exact: true })
@@ -106,7 +141,7 @@ await step('sector, type, technical, allowance and evidence filters narrow the l
 })
 await step('search finds a company; the dossier shows everything on one page with honest labels', async () => {
   await page.getByTestId('search').fill('NACSA'); await page.getByTestId('company-row').filter({ hasText: 'NACSA' }).first().click()
-  await page.getByTestId('dossier-title').waitFor(); const t = await page.getByTestId('dossier').innerText()
+  await page.getByTestId('dossier-title').filter({ hasText: 'NACSA' }).waitFor(); const t = await page.getByTestId('dossier').innerText()
   for (const h of ['Company information', 'Internship', 'Allowance', 'Contact', 'Research evidence', 'Email draft for Adam']) expect(t.includes(h), `missing section ${h}`)
   expect(!/RM\s?0\b/.test(t), 'unknown allowance shown as RM0')
   expect(/general rule, not confirmation/i.test(t), 'government policy must not read as employer confirmation')
